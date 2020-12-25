@@ -1,6 +1,6 @@
 # RVM 1.5
 
-[![CI](https://github.com/rcore-os/RVM1.5/workflows/CI/badge.svg?branch=master)](https://github.com/rcore-os/RVM1.5/actions)
+[![CI](https://github.com/rcore-os/RVM1.5/workflows/CI/badge.svg?branch=main)](https://github.com/rcore-os/RVM1.5/actions)
 
 A Type-1.5 hypervisor written in Rust.
 
