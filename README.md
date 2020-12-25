@@ -8,6 +8,8 @@ Drived by the driver from [Jailhouse](https://github.com/siemens/jailhouse).
 
 Supported architecture: x86_64 (Intel VMX).
 
+[![Enable and disable hypervisor in RVM1.5](demo/enable-disable-hypervisor.gif)](https://asciinema.org/a/381167?autoplay=1)
+
 ## Getting Started
 
 ### Build
