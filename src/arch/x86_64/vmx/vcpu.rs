@@ -117,7 +117,7 @@ impl Vcpu {
         Ok(ret)
     }
 
-    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
+    pub fn exit(&mut self, linux: &mut LinuxContext) -> HvResult {
         self.load_vmcs_guest(linux)?;
         Vmcs::clear(self.vmcs_region.paddr())?;
         unsafe { vmx::vmxoff()? };
@@ -138,11 +138,16 @@ impl Vcpu {
         self.guest_regs.return_to_linux(linux)
     }
 
-    pub fn inject_fault(&self) -> HvResult {
+    pub fn inject_fault(&mut self) -> HvResult {
         Vmcs::inject_interrupt(
             crate::arch::exception::ExceptionType::GeneralProtectionFault,
             Some(0),
         )?;
+        Ok(())
+    }
+
+    pub fn advance_rip(&mut self, instr_len: u8) -> HvResult {
+        VmcsField64Guest::RIP.write(VmcsField64Guest::RIP.read()? + instr_len as u64)?;
         Ok(())
     }
 
@@ -153,17 +158,12 @@ impl Vcpu {
     }
 
     pub fn in_hypercall(&self) -> bool {
-        if let Ok(info) = Vmcs::exit_info() {
-            info.exit_reason == VmxExitReason::VMCALL
-        } else {
-            false
-        }
+        matches!(Vmcs::exit_reason(), Ok(VmxExitReason::VMCALL))
     }
 
     pub fn guest_page_table(&self) -> GuestPageTable {
         use crate::memory::{addr::align_down, GenericPageTable};
-        let cr3 = self.cr(3) as usize;
-        unsafe { GuestPageTable::from_root(align_down(cr3)) }
+        unsafe { GuestPageTable::from_root(align_down(self.cr(3) as _)) }
     }
 }
 

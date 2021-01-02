@@ -1,14 +1,13 @@
 #[path = "vmx/mod.rs"]
 mod vendor;
 
-pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
-
-use libvmm::vmx::VmExitInfo;
 use x86_64::registers::control::Cr4Flags;
 
 use super::GuestRegisters;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
+
+pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
 
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
@@ -32,6 +31,11 @@ pub trait VcpuAccessGuestState {
     fn set_cr(&mut self, cr_idx: usize, val: u64);
 }
 
+pub const VM_EXIT_LEN_CPUID: u8 = 2;
+pub const VM_EXIT_LEN_RDMSR: u8 = 2;
+pub const VM_EXIT_LEN_WRMSR: u8 = 2;
+pub const VM_EXIT_LEN_HYPERCALL: u8 = 3;
+
 pub(super) struct VmExit<'a> {
     pub cpu_data: &'a mut PerCpu,
 }
@@ -43,7 +47,7 @@ impl VmExit<'_> {
         }
     }
 
-    pub fn handle_cpuid(&mut self, exit_info: &VmExitInfo) -> HvResult {
+    pub fn handle_cpuid(&mut self) -> HvResult {
         use super::cpuid::{cpuid, CpuIdEax, FeatureInfoFlags};
         let signature = unsafe { &*("RVMRVMRVMRVM".as_ptr() as *const [u32; 3]) };
         let cr4_flags = Cr4Flags::from_bits_truncate(self.cpu_data.vcpu.cr(4));
@@ -77,13 +81,13 @@ impl VmExit<'_> {
             }
             guest_regs.rcx = flags.bits();
         }
-        exit_info.advance_rip()?;
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_CPUID)?;
         Ok(())
     }
 
-    pub fn handle_hypercall(&mut self, exit_info: &VmExitInfo) -> HvResult {
+    pub fn handle_hypercall(&mut self) -> HvResult {
         use crate::hypercall::HyperCall;
-        exit_info.advance_rip()?;
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_HYPERCALL)?;
         let guest_regs = self.cpu_data.vcpu.regs();
         let (code, arg0, arg1) = (guest_regs.rax, guest_regs.rdi, guest_regs.rsi);
         HyperCall::new(&mut self.cpu_data).hypercall(code as _, arg0, arg1)?;
@@ -109,5 +113,13 @@ impl VmExit<'_> {
 }
 
 pub(super) fn vmexit_handler() {
-    VmExit::new().handle_exit().unwrap();
+    let mut vmexit = VmExit::new();
+    let res = vmexit.handle_exit();
+    if let Err(err) = res {
+        error!(
+            "Failed to handle VM exit, inject fault to guest...\n{:?}",
+            err
+        );
+        vmexit.cpu_data.fault().unwrap();
+    }
 }

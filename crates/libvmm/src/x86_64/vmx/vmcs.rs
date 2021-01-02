@@ -259,8 +259,12 @@ impl Vmcs {
         Ok(VmcsField32ReadOnly::VM_INSTRUCTION_ERROR.read()?.into())
     }
 
-    pub fn exit_info() -> VmResult<VmExitInfo> {
-        VmExitInfo::new()
+    pub fn exit_reason() -> VmResult<VmxExitReason> {
+        Ok(VmcsField32ReadOnly::VM_EXIT_REASON
+            .read()?
+            .get_bits(0..16)
+            .try_into()
+            .expect("Unknown VM-exit reason"))
     }
 
     pub fn set_ept_pointer(pml4_paddr: usize) -> VmResult<()> {
@@ -305,7 +309,7 @@ pub struct VmExitInfo {
 }
 
 impl VmExitInfo {
-    fn new() -> VmResult<Self> {
+    pub fn new() -> VmResult<Self> {
         let full_reason = VmcsField32ReadOnly::VM_EXIT_REASON.read()?;
         Ok(Self {
             exit_reason: full_reason
@@ -316,14 +320,6 @@ impl VmExitInfo {
             exit_instruction_length: VmcsField32ReadOnly::VM_EXIT_INSTRUCTION_LEN.read()?,
             guest_rip: VmcsField64Guest::RIP.read()?,
         })
-    }
-
-    pub fn advance_rip_with_len(&self, inst_len: u32) -> VmResult<()> {
-        VmcsField64Guest::RIP.write(self.guest_rip + inst_len as u64)
-    }
-
-    pub fn advance_rip(&self) -> VmResult<()> {
-        VmcsField64Guest::RIP.write(self.guest_rip + self.exit_instruction_length as u64)
     }
 }
 
