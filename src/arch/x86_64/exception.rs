@@ -79,7 +79,8 @@ unsafe extern "sysv64" fn common_exception_entry() {
         "mov rdi, rsp",
         "call {0}",
         restore_regs_from_stack!(),
-        "iret",
+        "add rsp, 16",  // skip num, error_code
+        "iretq",
         sym exception_handler,
     );
     unreachable!();
