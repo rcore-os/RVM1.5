@@ -1,4 +1,5 @@
 pub mod consts;
+#[macro_use]
 mod context;
 pub mod cpu;
 mod cpuid;

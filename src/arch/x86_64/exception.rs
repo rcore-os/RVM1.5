@@ -74,45 +74,12 @@ fn handle_nmi() {
 #[no_mangle]
 #[inline(never)]
 unsafe extern "sysv64" fn common_exception_entry() {
-    asm!("
-        push rax
-        push rcx
-        push rdx
-        push rbx
-        sub rsp, 8
-        push rbp
-        push rsi
-        push rdi
-        push r8
-        push r9
-        push r10
-        push r11
-        push r12
-        push r13
-        push r14
-        push r15
-
-        mov rdi, rsp
-        call {0}
-
-        pop r15
-        pop r14
-        pop r13
-        pop r12
-        pop r11
-        pop r10
-        pop r9
-        pop r8
-        pop rdi
-        pop rsi
-        pop rbp
-        add rsp, 8
-        pop rbx
-        pop rdx
-        pop rcx
-        pop rax
-
-        iret",
+    asm!(
+        save_regs_to_stack!(),
+        "mov rdi, rsp",
+        "call {0}",
+        restore_regs_from_stack!(),
+        "iret",
         sym exception_handler,
     );
     unreachable!();

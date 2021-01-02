@@ -27,7 +27,7 @@ impl VmExit<'_> {
         use super::cpuid::{cpuid, CpuIdEax, FeatureInfoFlags};
         let signature = unsafe { &*("RVMRVMRVMRVM".as_ptr() as *const [u32; 3]) };
         let cr4_flags = Cr4Flags::from_bits_truncate(self.cpu_data.guest_all_state().cr(4));
-        let guest_regs = self.cpu_data.guest_regs_mut();
+        let guest_regs = &mut self.cpu_data.vcpu.guest_regs;
         let function = guest_regs.rax as u32;
         if function == CpuIdEax::HypervisorInfo as _ {
             guest_regs.rax = CpuIdEax::HypervisorFeatures as u32 as _;
@@ -55,7 +55,7 @@ impl VmExit<'_> {
             } else if function == CpuIdEax::AmdFeatureInfo as _ {
                 flags.remove(FeatureInfoFlags::SVM);
             }
-            guest_regs.rcx = flags.bits() as _;
+            guest_regs.rcx = flags.bits();
         }
         exit_info.advance_rip()?;
         Ok(())
@@ -64,9 +64,9 @@ impl VmExit<'_> {
     pub fn handle_hypercall(&mut self, exit_info: &VmExitInfo) -> HvResult {
         use crate::hypercall::HyperCall;
         exit_info.advance_rip()?;
-        let guest_regs = self.cpu_data.guest_regs();
+        let guest_regs = &self.cpu_data.vcpu.guest_regs;
         let (code, arg0, arg1) = (guest_regs.rax, guest_regs.rdi, guest_regs.rsi);
-        HyperCall::new(&mut self.cpu_data).hypercall(code, arg0, arg1)?;
+        HyperCall::new(&mut self.cpu_data).hypercall(code as _, arg0, arg1)?;
         Ok(())
     }
 }

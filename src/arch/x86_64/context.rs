@@ -10,15 +10,15 @@ const SAVED_LINUX_REGS: usize = 7;
 
 #[derive(Debug)]
 pub struct LinuxContext {
-    pub rsp: usize,
-    pub rip: usize,
+    pub rsp: u64,
+    pub rip: u64,
 
-    pub r15: usize,
-    pub r14: usize,
-    pub r13: usize,
-    pub r12: usize,
-    pub rbx: usize,
-    pub rbp: usize,
+    pub r15: u64,
+    pub r14: u64,
+    pub r13: u64,
+    pub r12: u64,
+    pub rbx: u64,
+    pub rbp: u64,
 
     pub cs: Segment,
     pub ds: Segment,
@@ -30,7 +30,7 @@ pub struct LinuxContext {
     pub idt: DescriptorTablePointer,
 
     pub cr0: Cr0Flags,
-    pub cr3: usize,
+    pub cr3: u64,
     pub cr4: Cr4Flags,
 
     pub efer: u64,
@@ -40,40 +40,81 @@ pub struct LinuxContext {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GuestRegisters {
-    pub r15: usize,
-    pub r14: usize,
-    pub r13: usize,
-    pub r12: usize,
-    pub r11: usize,
-    pub r10: usize,
-    pub r9: usize,
-    pub r8: usize,
-    pub rdi: usize,
-    pub rsi: usize,
-    pub rbp: usize,
-    _unsed_rsp: usize,
-    pub rbx: usize,
-    pub rdx: usize,
-    pub rcx: usize,
-    pub rax: usize,
+    pub rax: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rbx: u64,
+    pub unused_rsp: u64,
+    pub rbp: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+}
+
+macro_rules! save_regs_to_stack {
+    () => {
+        "
+        push r15
+        push r14
+        push r13
+        push r12
+        push r11
+        push r10
+        push r9
+        push r8
+        push rdi
+        push rsi
+        push rbp
+        sub rsp, 8
+        push rbx
+        push rdx
+        push rcx
+        push rax"
+    };
+}
+
+macro_rules! restore_regs_from_stack {
+    () => {
+        "
+        pop rax
+        pop rcx
+        pop rdx
+        pop rbx
+        add rsp, 8
+        pop rbp
+        pop rsi
+        pop rdi
+        pop r8
+        pop r9
+        pop r10
+        pop r11
+        pop r12
+        pop r13
+        pop r14
+        pop r15"
+    };
 }
 
 impl LinuxContext {
     pub fn load_from(linux_sp: usize) -> Self {
-        let regs =
-            unsafe { core::slice::from_raw_parts(linux_sp as *const usize, SAVED_LINUX_REGS) };
-
+        let regs = unsafe { core::slice::from_raw_parts(linux_sp as *const u64, SAVED_LINUX_REGS) };
         let gdt = GDTStruct::sgdt();
-
         let mut fs = Segment::from_selector(segmentation::fs(), &gdt);
         let mut gs = Segment::from_selector(segmentation::gs(), &gdt);
         fs.base = Msr::IA32_FS_BASE.read();
         gs.base = Msr::IA32_GS_BASE.read();
 
         let ret = Self {
-            rsp: regs.as_ptr_range().end as usize,
+            rsp: regs.as_ptr_range().end as _,
             r15: regs[0],
             r14: regs[1],
             r13: regs[2],
@@ -90,7 +131,7 @@ impl LinuxContext {
             gdt,
             idt: IDTStruct::sidt(),
             cr0: Cr0::read(),
-            cr3: Cr3::read().0.start_address().as_u64() as usize,
+            cr3: Cr3::read().0.start_address().as_u64(),
             cr4: Cr4::read(),
             efer: Msr::IA32_EFER.read(),
             lstar: Msr::IA32_LSTAR.read(),
@@ -124,7 +165,7 @@ impl LinuxContext {
             Cr4::write(self.cr4);
             // cr3 must be last in case cr4 enables PCID
             Cr3::write(
-                PhysFrame::containing_address(PhysAddr::new(self.cr3 as _)),
+                PhysFrame::containing_address(PhysAddr::new(self.cr3)),
                 Cr3Flags::empty(), // clear PCID
             );
 
@@ -157,6 +198,26 @@ impl LinuxContext {
 
 impl GuestRegisters {
     pub fn set_return(&mut self, ret: usize) {
-        self.rax = ret
+        self.rax = ret as _
+    }
+
+    pub fn return_to_linux(&self, linux: &LinuxContext) -> ! {
+        unsafe {
+            asm!(
+                "mov rsp, {linux_rsp}",
+                "push {linux_rip}",
+                "mov rcx, rsp",
+                "mov rsp, {guest_regs}",
+                "mov [rsp + {guest_regs_size}], rcx",
+                restore_regs_from_stack!(),
+                "pop rsp",
+                "ret",
+                linux_rsp = in(reg) linux.rsp,
+                linux_rip = in(reg) linux.rip,
+                guest_regs = in(reg) self,
+                guest_regs_size = const core::mem::size_of::<Self>(),
+            );
+        }
+        unreachable!()
     }
 }

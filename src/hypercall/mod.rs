@@ -9,7 +9,7 @@ use crate::error::HvResult;
 use crate::percpu::PerCpu;
 
 numeric_enum! {
-    #[repr(usize)]
+    #[repr(u32)]
     #[derive(Debug, Eq, PartialEq, Copy, Clone)]
     pub enum HyperCallCode {
         HypervisorDisable = 0,
@@ -18,7 +18,7 @@ numeric_enum! {
 
 impl HyperCallCode {
     fn is_privileged(self) -> bool {
-        (self as usize).get_bits(30..32) == 0
+        (self as u32).get_bits(30..32) == 0
     }
 }
 
@@ -37,7 +37,7 @@ impl<'a> HyperCall<'a> {
         }
     }
 
-    pub fn hypercall(&mut self, code: usize, arg0: usize, _arg1: usize) -> HvResult {
+    pub fn hypercall(&mut self, code: u32, arg0: u64, _arg1: u64) -> HvResult {
         let code = match HyperCallCode::try_from(code) {
             Ok(code) => code,
             Err(_) => {
@@ -77,7 +77,7 @@ impl<'a> HyperCall<'a> {
                 Ok(ret) => ret,
                 Err(err) => err.code() as _,
             };
-            self.cpu_data.guest_regs_mut().set_return(val);
+            self.cpu_data.vcpu.guest_regs.set_return(val);
         }
 
         Ok(())

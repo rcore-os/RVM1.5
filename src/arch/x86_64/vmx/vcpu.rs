@@ -19,11 +19,16 @@ use crate::cell::Cell;
 use crate::error::HvResult;
 use crate::memory::addr::align_down;
 
+#[repr(C)]
 pub struct Vcpu {
     /// VMXON region, required by VMX
     _vmxon_region: VmxRegion,
     /// VMCS of this CPU, required by VMX
     vmcs_region: VmxRegion,
+    /// Save guest general registers when VM exits.
+    pub guest_regs: GuestRegisters,
+    /// RSP will be loaded from here when VM exits.
+    host_stack_top: u64,
 }
 
 lazy_static! {
@@ -101,6 +106,8 @@ impl Vcpu {
         let mut ret = Self {
             _vmxon_region: vmxon_region,
             vmcs_region,
+            host_stack_top: 0,
+            guest_regs: Default::default(),
         };
         ret.vmcs_setup(linux, cell)?;
 
@@ -124,8 +131,8 @@ impl Vcpu {
         hv_result_err!(EIO)
     }
 
-    pub fn deactivate_vmm(&self, linux: &LinuxContext, guest_regs: &GuestRegisters) -> HvResult {
-        unsafe { return_to_linux(linux, guest_regs) };
+    pub fn deactivate_vmm(&self, linux: &LinuxContext) -> HvResult {
+        self.guest_regs.return_to_linux(linux)
     }
 
     pub fn inject_fault(&self) -> HvResult {
@@ -185,15 +192,21 @@ impl Vcpu {
         VmcsField64Host::GS_BASE.write(Msr::IA32_GS_BASE.read())?;
         VmcsField64Host::TR_BASE.write(0)?;
 
-        VmcsField64Host::GDTR_BASE.write(GDT.lock().pointer().base as _)?;
-        VmcsField64Host::IDTR_BASE.write(IDT.lock().pointer().base as _)?;
+        VmcsField64Host::GDTR_BASE.write(GDT.lock().pointer().base)?;
+        VmcsField64Host::IDTR_BASE.write(IDT.lock().pointer().base)?;
 
         VmcsField64Host::IA32_SYSENTER_ESP.write(0)?;
         VmcsField64Host::IA32_SYSENTER_EIP.write(0)?;
         VmcsField32Host::IA32_SYSENTER_CS.write(0)?;
 
-        VmcsField64Host::RSP.write(crate::PerCpu::from_local_base().stack_top() as _)?;
+        let cpu_local = crate::PerCpu::from_local_base();
+        let rsp = &cpu_local.vcpu.host_stack_top as *const _ as u64;
+        VmcsField64Host::RSP.write(rsp)?; // used for saving guest registers
+        self.host_stack_top = cpu_local.stack_top() as _; // the real host stack
         VmcsField64Host::RIP.write(vmx_exit as usize as _)?;
+        assert!(
+            unsafe { (&cpu_local.vcpu.guest_regs as *const GuestRegisters).add(1) } as u64 == rsp
+        );
         Ok(())
     }
 
@@ -250,7 +263,7 @@ impl Vcpu {
 
         self.set_guest_cr(0, linux.cr0.bits())?;
         self.set_guest_cr(4, linux.cr4.bits())?;
-        VmcsField64Guest::CR3.write(linux.cr3 as _)?;
+        VmcsField64Guest::CR3.write(linux.cr3)?;
 
         set_guest_segment!(linux.cs, CS);
         set_guest_segment!(linux.ds, DS);
@@ -262,13 +275,13 @@ impl Vcpu {
         set_guest_segment!(invalid_seg, SS);
         set_guest_segment!(invalid_seg, LDTR);
 
-        VmcsField64Guest::GDTR_BASE.write(linux.gdt.base as _)?;
+        VmcsField64Guest::GDTR_BASE.write(linux.gdt.base)?;
         VmcsField32Guest::GDTR_LIMIT.write(linux.gdt.limit as _)?;
-        VmcsField64Guest::IDTR_BASE.write(linux.idt.base as _)?;
+        VmcsField64Guest::IDTR_BASE.write(linux.idt.base)?;
         VmcsField32Guest::IDTR_LIMIT.write(linux.idt.limit as _)?;
 
-        VmcsField64Guest::RSP.write(linux.rsp as _)?;
-        VmcsField64Guest::RIP.write(linux.rip as _)?;
+        VmcsField64Guest::RSP.write(linux.rsp)?;
+        VmcsField64Guest::RIP.write(linux.rip)?;
         VmcsField64Guest::RFLAGS.write(0x2)?;
 
         VmcsField32Guest::SYSENTER_CS.write(Msr::IA32_SYSENTER_CS.read() as _)?;
@@ -288,10 +301,10 @@ impl Vcpu {
     }
 
     fn load_vmcs_guest(&self, linux: &mut LinuxContext) -> HvResult {
-        linux.rip = VmcsField64Guest::RIP.read()? as _;
-        linux.rsp = VmcsField64Guest::RSP.read()? as _;
+        linux.rip = VmcsField64Guest::RIP.read()?;
+        linux.rsp = VmcsField64Guest::RSP.read()?;
         linux.cr0 = Cr0Flags::from_bits_truncate(VmcsField64Guest::CR0.read()?);
-        linux.cr3 = VmcsField64Guest::CR3.read()? as _;
+        linux.cr3 = VmcsField64Guest::CR3.read()?;
         linux.cr4 = Cr4Flags::from_bits_truncate(VmcsField64Guest::CR4.read()?)
             - Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS;
 
@@ -304,9 +317,9 @@ impl Vcpu {
         linux.gs.base = VmcsField64Guest::GS_BASE.read()?;
         linux.tss.selector = SegmentSelector::from_raw(VmcsField16Guest::TR_SELECTOR.read()?);
 
-        linux.gdt.base = VmcsField64Guest::GDTR_BASE.read()? as _;
+        linux.gdt.base = VmcsField64Guest::GDTR_BASE.read()?;
         linux.gdt.limit = VmcsField32Guest::GDTR_LIMIT.read()? as _;
-        linux.idt.base = VmcsField64Guest::IDTR_BASE.read()? as _;
+        linux.idt.base = VmcsField64Guest::IDTR_BASE.read()?;
         linux.idt.limit = VmcsField32Guest::IDTR_LIMIT.read()? as _;
 
         unsafe {
@@ -411,81 +424,16 @@ unsafe fn vmx_entry(linux: &LinuxContext) {
 #[naked]
 #[inline(never)]
 unsafe extern "sysv64" fn vmx_exit() -> ! {
-    // See crate::arch::context::GuestRegisters
-    asm!("
-        push rax
-        push rcx
-        push rdx
-        push rbx
-        sub rsp, 8
-        push rbp
-        push rsi
-        push rdi
-        push r8
-        push r9
-        push r10
-        push r11
-        push r12
-        push r13
-        push r14
-        push r15
-
-        call {0}
-
-        pop r15
-        pop r14
-        pop r13
-        pop r12
-        pop r11
-        pop r10
-        pop r9
-        pop r8
-        pop rdi
-        pop rsi
-        pop rbp
-        add rsp, 8
-        pop rbx
-        pop rdx
-        pop rcx
-        pop rax
-
-        vmresume",
+    asm!(
+        save_regs_to_stack!(),
+        "mov r15, rsp",         // save temporary rsp to r15
+        "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
+        "call {1}",             // call vmexit_handler
+        "mov rsp, r15",         // load temporary rsp from r15
+        restore_regs_from_stack!(),
+        "vmresume",
+        const core::mem::size_of::<GuestRegisters>(),
         sym super::super::vmexit::vmexit_handler,
     );
     panic!("VM resume failed: {:?}", Vmcs::instruction_error());
-}
-
-unsafe fn return_to_linux(linux: &LinuxContext, guest_regs: &GuestRegisters) -> ! {
-    asm!("
-        mov rsp, rax
-        push {linux_rip}
-        push {guest_rax}
-        mov rax, rsp
-        mov rsp, {guest_regs}
-
-        pop r15
-        pop r14
-        pop r13
-        pop r12
-        pop r11
-        pop r10
-        pop r9
-        pop r8
-        pop rdi
-        pop rsi
-        pop rbp
-        add rsp, 8
-        pop rbx
-        pop rdx
-        pop rcx
-
-        mov rsp, rax
-        pop rax
-        ret",
-        linux_rip = in(reg) linux.rip,
-        guest_rax = in(reg) guest_regs.rax,
-        guest_regs = in(reg) guest_regs,
-        in("rax") linux.rsp,
-    );
-    unreachable!()
 }

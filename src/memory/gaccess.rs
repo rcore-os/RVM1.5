@@ -47,6 +47,16 @@ impl AsGuestPtr for GuestVirtAddr {
     }
 }
 
+impl AsGuestPtr for u64 {
+    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTable) -> GuestPtr<'_, T, P> {
+        GuestPtr {
+            gvaddr: self as _,
+            guest_pt,
+            mark: PhantomData,
+        }
+    }
+}
+
 impl<T, P: Policy> Debug for GuestPtr<'_, T, P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{:#x?}", self.gvaddr)

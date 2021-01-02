@@ -22,7 +22,7 @@ impl VmExit<'_> {
     }
 
     fn handle_msr_read(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let guest_regs = self.cpu_data.guest_regs_mut();
+        let guest_regs = &mut self.cpu_data.vcpu.guest_regs;
         let id = guest_regs.rcx;
         warn!("VM exit: RDMSR({:#x})", id);
         // TODO
@@ -33,7 +33,7 @@ impl VmExit<'_> {
     }
 
     fn handle_msr_write(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let guest_regs = self.cpu_data.guest_regs();
+        let guest_regs = &self.cpu_data.vcpu.guest_regs;
         let id = guest_regs.rcx;
         let value = guest_regs.rax | (guest_regs.rdx << 32);
         warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);

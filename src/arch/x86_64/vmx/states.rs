@@ -27,23 +27,21 @@ impl Write for Out {}
 pub type VcpuGuestStateMut<'a> = VcpuGuestState<'a, Out>;
 
 pub struct VcpuGuestState<'a, P: Policy = In> {
-    regs: &'a mut GuestRegisters,
-    vcpu: &'a Vcpu,
+    vcpu: &'a mut Vcpu,
     mark: PhantomData<P>,
 }
 
 impl<'a, P: Policy> VcpuGuestState<'a, P> {
     #[allow(clippy::cast_ref_to_mut)]
-    pub fn from(cpu_data: &'a PerCpu) -> Self {
+    pub fn from(_cpu_data: &'a PerCpu) -> Self {
         Self {
-            regs: unsafe { &mut *(cpu_data.guest_regs() as *const _ as *mut _) },
-            vcpu: &cpu_data.vcpu,
+            vcpu: &mut PerCpu::from_local_base_mut().vcpu,
             mark: PhantomData,
         }
     }
 
     pub fn regs(&self) -> &GuestRegisters {
-        self.regs
+        &self.vcpu.guest_regs
     }
 
     pub fn rip(&self) -> u64 {
@@ -55,7 +53,7 @@ impl<'a, P: Policy> VcpuGuestState<'a, P> {
     }
 
     pub fn rbp(&self) -> u64 {
-        self.regs().rbp as _
+        self.regs().rbp
     }
 
     pub fn rflags(&self) -> u64 {
@@ -69,7 +67,7 @@ impl<'a, P: Policy> VcpuGuestState<'a, P> {
 
 impl<'a> VcpuGuestStateMut<'a> {
     pub fn regs_mut(&mut self) -> &mut GuestRegisters {
-        self.regs
+        &mut self.vcpu.guest_regs
     }
 
     pub fn set_rsp(&mut self, rsp: u64) {

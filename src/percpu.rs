@@ -1,7 +1,8 @@
 use core::fmt::{Debug, Formatter, Result};
+use core::mem::size_of;
 use core::sync::atomic::{AtomicIsize, Ordering};
 
-use crate::arch::{GuestRegisters, LinuxContext};
+use crate::arch::LinuxContext;
 use crate::arch::{HostPageTable, Vcpu, VcpuGuestState, VcpuGuestStateMut};
 use crate::cell::Cell;
 use crate::consts::{HV_STACK_SIZE, LOCAL_PER_CPU_BASE};
@@ -10,7 +11,7 @@ use crate::ffi::PER_CPU_ARRAY_PTR;
 use crate::header::HvHeader;
 use crate::memory::{addr::virt_to_phys, GenericPageTable, MemFlags, MemoryRegion, MemorySet};
 
-pub const PER_CPU_SIZE: usize = core::mem::size_of::<PerCpu>();
+pub const PER_CPU_SIZE: usize = size_of::<PerCpu>();
 
 static ACTIVATED_CPUS: AtomicIsize = AtomicIsize::new(0);
 
@@ -25,7 +26,7 @@ pub struct PerCpu {
     pub cpu_id: usize,
     pub state: CpuState,
     pub vcpu: Vcpu,
-    stack: [u8; HV_STACK_SIZE],
+    stack: [usize; HV_STACK_SIZE / size_of::<usize>()],
     linux: LinuxContext,
     hvm: MemorySet<HostPageTable>,
 }
@@ -57,16 +58,6 @@ impl PerCpu {
 
     pub fn stack_top(&self) -> usize {
         self.stack.as_ptr_range().end as _
-    }
-
-    pub fn guest_regs(&self) -> &GuestRegisters {
-        let ptr = self.stack_top() as *const GuestRegisters;
-        unsafe { &*ptr.sub(1) }
-    }
-
-    pub fn guest_regs_mut(&mut self) -> &mut GuestRegisters {
-        let ptr = self.stack_top() as *mut GuestRegisters;
-        unsafe { &mut *ptr.sub(1) }
     }
 
     pub fn guest_all_state(&self) -> VcpuGuestState {
@@ -127,7 +118,7 @@ impl PerCpu {
         self.vcpu.exit(&mut self.linux)?;
         self.linux.restore();
         self.state = CpuState::HvDisabled;
-        self.vcpu.deactivate_vmm(&self.linux, self.guest_regs())?;
+        self.vcpu.deactivate_vmm(&self.linux)?;
         unreachable!()
     }
 
@@ -148,7 +139,7 @@ impl PerCpu {
         println!("Deactivating hypervisor on CPU {}...", self.cpu_id);
         ACTIVATED_CPUS.fetch_add(-1, Ordering::SeqCst);
 
-        self.guest_regs_mut().set_return(ret_code);
+        self.vcpu.guest_regs.set_return(ret_code);
 
         // Restore full per_cpu region access so that we can switch
         // back to the common stack mapping and to Linux page tables.
