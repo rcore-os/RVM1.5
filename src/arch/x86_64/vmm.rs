@@ -1,8 +1,36 @@
+#[path = "vmx/mod.rs"]
+mod vendor;
+
+pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
+
 use libvmm::vmx::VmExitInfo;
 use x86_64::registers::control::Cr4Flags;
 
+use super::GuestRegisters;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
+
+pub trait VcpuAccessGuestState {
+    // Architecture independent methods:
+
+    fn regs(&self) -> &GuestRegisters;
+    fn regs_mut(&mut self) -> &mut GuestRegisters;
+    fn instr_pointer(&self) -> u64;
+    fn stack_pointer(&self) -> u64;
+    fn frame_pointer(&self) -> u64 {
+        self.regs().rbp
+    }
+    fn set_stack_pointer(&mut self, sp: u64);
+    fn set_return_val(&mut self, ret_val: usize) {
+        self.regs_mut().rax = ret_val as _
+    }
+
+    // Methods only available for x86 cpus:
+
+    fn rflags(&self) -> u64;
+    fn cr(&self, cr_idx: usize) -> u64;
+    fn set_cr(&mut self, cr_idx: usize, val: u64);
+}
 
 pub(super) struct VmExit<'a> {
     pub cpu_data: &'a mut PerCpu,
@@ -15,19 +43,11 @@ impl VmExit<'_> {
         }
     }
 
-    pub fn dump_guest_state(&self) -> HvResult<alloc::string::String> {
-        Ok(format!(
-            "Guest State Dump:\n\
-            {:#x?}",
-            self.cpu_data.guest_all_state()
-        ))
-    }
-
     pub fn handle_cpuid(&mut self, exit_info: &VmExitInfo) -> HvResult {
         use super::cpuid::{cpuid, CpuIdEax, FeatureInfoFlags};
         let signature = unsafe { &*("RVMRVMRVMRVM".as_ptr() as *const [u32; 3]) };
-        let cr4_flags = Cr4Flags::from_bits_truncate(self.cpu_data.guest_all_state().cr(4));
-        let guest_regs = &mut self.cpu_data.vcpu.guest_regs;
+        let cr4_flags = Cr4Flags::from_bits_truncate(self.cpu_data.vcpu.cr(4));
+        let guest_regs = self.cpu_data.vcpu.regs_mut();
         let function = guest_regs.rax as u32;
         if function == CpuIdEax::HypervisorInfo as _ {
             guest_regs.rax = CpuIdEax::HypervisorFeatures as u32 as _;
@@ -64,9 +84,26 @@ impl VmExit<'_> {
     pub fn handle_hypercall(&mut self, exit_info: &VmExitInfo) -> HvResult {
         use crate::hypercall::HyperCall;
         exit_info.advance_rip()?;
-        let guest_regs = &self.cpu_data.vcpu.guest_regs;
+        let guest_regs = self.cpu_data.vcpu.regs();
         let (code, arg0, arg1) = (guest_regs.rax, guest_regs.rdi, guest_regs.rsi);
         HyperCall::new(&mut self.cpu_data).hypercall(code as _, arg0, arg1)?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    fn test_read_guest_memory(&self, gvaddr: usize, size: usize) -> HvResult {
+        use crate::cell;
+        use crate::memory::addr::phys_to_virt;
+        use crate::memory::GenericPageTable;
+
+        let pt = self.cpu_data.vcpu.guest_page_table();
+        let (gpaddr, _, _) = pt.query(gvaddr)?;
+        let (hpaddr, _, _) = cell::ROOT_CELL.gpm.read().page_table().query(gpaddr)?;
+        let buf = unsafe { core::slice::from_raw_parts(phys_to_virt(hpaddr) as *const u8, size) };
+        println!(
+            "GVA({:#x?}) -> GPA({:#x?}) -> HPA({:#x?}): {:02X?}",
+            gvaddr, gpaddr, hpaddr, buf
+        );
         Ok(())
     }
 }

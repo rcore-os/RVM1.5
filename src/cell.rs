@@ -90,7 +90,7 @@ lazy_static! {
 }
 
 pub fn init() -> HvResult {
-    crate::arch::check_hypervisor_feature()?;
+    crate::arch::vmm::check_hypervisor_feature()?;
 
     lazy_static::initialize(&ROOT_CELL);
 

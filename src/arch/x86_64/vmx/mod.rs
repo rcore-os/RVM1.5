@@ -1,5 +1,4 @@
 mod ept;
-mod states;
 mod structs;
 mod vcpu;
 mod vmexit;
@@ -7,11 +6,10 @@ mod vmexit;
 use libvmm::vmx::Vmcs;
 use x86::vmx::VmFail;
 
-use super::cpuid::CpuFeatures;
+use crate::arch::cpuid::CpuFeatures;
 use crate::error::{HvError, HvResult};
 
 pub use ept::ExtendedPageTable as HvPageTable;
-pub use states::{VcpuGuestState, VcpuGuestStateMut};
 pub use vcpu::Vcpu;
 
 impl From<VmFail> for HvError {

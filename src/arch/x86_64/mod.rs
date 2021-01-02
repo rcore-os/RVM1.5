@@ -8,16 +8,13 @@ pub mod io;
 mod page_table;
 mod segmentation;
 mod tables;
-mod vmexit;
-
-#[path = "vmx/mod.rs"]
-mod vendor;
+pub mod vmm;
 
 pub use context::{GuestRegisters, LinuxContext};
 pub use exception::ExceptionType;
 pub use page_table::PageTable as HostPageTable;
 pub use page_table::PageTable as GuestPageTable;
-pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu, VcpuGuestState, VcpuGuestStateMut};
+pub use vmm::HvPageTable;
 
 use crate::percpu::PerCpu;
 

@@ -2,8 +2,8 @@ use core::fmt::{Debug, Formatter, Result};
 use core::mem::size_of;
 use core::sync::atomic::{AtomicIsize, Ordering};
 
-use crate::arch::LinuxContext;
-use crate::arch::{HostPageTable, Vcpu, VcpuGuestState, VcpuGuestStateMut};
+use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
+use crate::arch::{HostPageTable, LinuxContext};
 use crate::cell::Cell;
 use crate::consts::{HV_STACK_SIZE, LOCAL_PER_CPU_BASE};
 use crate::error::HvResult;
@@ -58,14 +58,6 @@ impl PerCpu {
 
     pub fn stack_top(&self) -> usize {
         self.stack.as_ptr_range().end as _
-    }
-
-    pub fn guest_all_state(&self) -> VcpuGuestState {
-        VcpuGuestState::from(self)
-    }
-
-    fn _guest_all_state_mut(&self) -> VcpuGuestStateMut {
-        VcpuGuestStateMut::from(self)
     }
 
     pub fn activated_cpus() -> usize {
@@ -139,7 +131,7 @@ impl PerCpu {
         println!("Deactivating hypervisor on CPU {}...", self.cpu_id);
         ACTIVATED_CPUS.fetch_add(-1, Ordering::SeqCst);
 
-        self.vcpu.guest_regs.set_return(ret_code);
+        self.vcpu.set_return_val(ret_code);
 
         // Restore full per_cpu region access so that we can switch
         // back to the common stack mapping and to Linux page tables.
@@ -171,7 +163,7 @@ impl Debug for PerCpu {
         res.field("cpu_id", &self.cpu_id)
             .field("state", &self.state);
         if self.state != CpuState::HvDisabled {
-            res.field("guest_state", &self.guest_all_state());
+            res.field("vcpu", &self.vcpu);
         } else {
             res.field("linux", &self.linux);
         }

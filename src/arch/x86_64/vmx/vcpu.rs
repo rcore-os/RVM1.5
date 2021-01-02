@@ -1,3 +1,5 @@
+use core::fmt::{Debug, Formatter, Result};
+
 use libvmm::msr::Msr;
 use libvmm::vmx::{
     self,
@@ -9,15 +11,16 @@ use libvmm::vmx::{
 };
 use x86::segmentation::SegmentSelector;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Cr4, Cr4Flags};
+use x86_64::registers::rflags::RFlags;
 
-use super::super::cpuid::CpuFeatures;
-use super::super::segmentation::{Segment, SegmentAccessRights};
-use super::super::tables::{GDTStruct, GDT, IDT};
-use super::super::{GuestPageTable, GuestRegisters, LinuxContext};
 use super::structs::{MsrBitmap, VmxRegion};
+use crate::arch::cpuid::CpuFeatures;
+use crate::arch::segmentation::{Segment, SegmentAccessRights};
+use crate::arch::tables::{GDTStruct, GDT, IDT};
+use crate::arch::vmm::VcpuAccessGuestState;
+use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
-use crate::memory::addr::align_down;
 
 #[repr(C)]
 pub struct Vcpu {
@@ -26,7 +29,7 @@ pub struct Vcpu {
     /// VMCS of this CPU, required by VMX
     vmcs_region: VmxRegion,
     /// Save guest general registers when VM exits.
-    pub guest_regs: GuestRegisters,
+    guest_regs: GuestRegisters,
     /// RSP will be loaded from here when VM exits.
     host_stack_top: u64,
 }
@@ -137,7 +140,7 @@ impl Vcpu {
 
     pub fn inject_fault(&self) -> HvResult {
         Vmcs::inject_interrupt(
-            super::super::exception::ExceptionType::GeneralProtectionFault,
+            crate::arch::exception::ExceptionType::GeneralProtectionFault,
             Some(0),
         )?;
         Ok(())
@@ -158,11 +161,13 @@ impl Vcpu {
     }
 
     pub fn guest_page_table(&self) -> GuestPageTable {
-        use crate::memory::GenericPageTable;
-        let cr3 = self.get_guest_cr(3).expect("Failed to read guest CR3") as usize;
+        use crate::memory::{addr::align_down, GenericPageTable};
+        let cr3 = self.cr(3) as usize;
         unsafe { GuestPageTable::from_root(align_down(cr3)) }
     }
+}
 
+impl Vcpu {
     fn vmcs_setup(&mut self, linux: &LinuxContext, cell: &Cell) -> HvResult {
         let paddr = self.vmcs_region.paddr();
         Vmcs::clear(paddr)?;
@@ -210,59 +215,12 @@ impl Vcpu {
         Ok(())
     }
 
-    pub(super) fn get_guest_cr(&self, cr_idx: usize) -> HvResult<u64> {
-        Ok(match cr_idx {
-            0 => VmcsField64Guest::CR0.read()?,
-            3 => VmcsField64Guest::CR3.read()?,
-            4 => {
-                let host_mask = VmcsField64Control::CR4_GUEST_HOST_MASK.read()?;
-                (VmcsField64Control::CR4_READ_SHADOW.read()? & host_mask)
-                    | (VmcsField64Guest::CR4.read()? & !host_mask)
-            }
-            _ => unreachable!(),
-        })
-    }
-
-    pub(super) fn set_guest_cr(&mut self, cr_idx: usize, val: u64) -> HvResult {
-        match cr_idx {
-            0 => {
-                // Retrieve/validate restrictions on CR0
-                //
-                // In addition to what the VMX MSRs tell us, make sure that
-                // - NW and CD are kept off as they are not updated on VM exit and we
-                //   don't want them enabled for performance reasons while in root mode
-                // - PE and PG can be freely chosen (by the guest) because we demand
-                //   unrestricted guest mode support anyway
-                // - ET is ignored
-                let must0 = Msr::IA32_VMX_CR0_FIXED1.read()
-                    & !(Cr0Flags::NOT_WRITE_THROUGH | Cr0Flags::CACHE_DISABLE).bits();
-                let must1 = Msr::IA32_VMX_CR0_FIXED0.read()
-                    & !(Cr0Flags::PAGING | Cr0Flags::PROTECTED_MODE_ENABLE).bits();
-                VmcsField64Guest::CR0.write((val & must0) | must1)?;
-                VmcsField64Control::CR0_READ_SHADOW.write(val)?;
-                VmcsField64Control::CR0_GUEST_HOST_MASK.write(must1 | !must0)?;
-            }
-            3 => VmcsField64Guest::CR3.write(val)?,
-            4 => {
-                // Retrieve/validate restrictions on CR4
-                let must0 = Msr::IA32_VMX_CR4_FIXED1.read();
-                let must1 = Msr::IA32_VMX_CR4_FIXED0.read();
-                let val = val | Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS.bits();
-                VmcsField64Guest::CR4.write((val & must0) | must1)?;
-                VmcsField64Control::CR4_READ_SHADOW.write(val)?;
-                VmcsField64Control::CR4_GUEST_HOST_MASK.write(must1 | !must0)?;
-            }
-            _ => unreachable!(),
-        };
-        Ok(())
-    }
-
     fn setup_vmcs_guest(&mut self, linux: &LinuxContext) -> HvResult {
         VmcsField64Guest::IA32_PAT.write(linux.pat)?;
         VmcsField64Guest::IA32_EFER.write(linux.efer)?;
 
-        self.set_guest_cr(0, linux.cr0.bits())?;
-        self.set_guest_cr(4, linux.cr4.bits())?;
+        self.set_cr(0, linux.cr0.bits());
+        self.set_cr(4, linux.cr4.bits());
         VmcsField64Guest::CR3.write(linux.cr3)?;
 
         set_guest_segment!(linux.cs, CS);
@@ -406,6 +364,130 @@ impl Vcpu {
     }
 }
 
+impl VcpuAccessGuestState for Vcpu {
+    fn regs(&self) -> &GuestRegisters {
+        &self.guest_regs
+    }
+
+    fn regs_mut(&mut self) -> &mut GuestRegisters {
+        &mut self.guest_regs
+    }
+
+    fn instr_pointer(&self) -> u64 {
+        VmcsField64Guest::RIP.read().unwrap()
+    }
+
+    fn stack_pointer(&self) -> u64 {
+        VmcsField64Guest::RSP.read().unwrap()
+    }
+
+    fn set_stack_pointer(&mut self, sp: u64) {
+        VmcsField64Guest::RSP.write(sp).unwrap()
+    }
+
+    fn rflags(&self) -> u64 {
+        VmcsField64Guest::RFLAGS.read().unwrap()
+    }
+
+    fn cr(&self, cr_idx: usize) -> u64 {
+        (|| -> HvResult<u64> {
+            Ok(match cr_idx {
+                0 => VmcsField64Guest::CR0.read()?,
+                3 => VmcsField64Guest::CR3.read()?,
+                4 => {
+                    let host_mask = VmcsField64Control::CR4_GUEST_HOST_MASK.read()?;
+                    (VmcsField64Control::CR4_READ_SHADOW.read()? & host_mask)
+                        | (VmcsField64Guest::CR4.read()? & !host_mask)
+                }
+                _ => unreachable!(),
+            })
+        })()
+        .expect("Failed to read guest control register")
+    }
+
+    fn set_cr(&mut self, cr_idx: usize, val: u64) {
+        (|| -> HvResult {
+            match cr_idx {
+                0 => {
+                    // Retrieve/validate restrictions on CR0
+                    //
+                    // In addition to what the VMX MSRs tell us, make sure that
+                    // - NW and CD are kept off as they are not updated on VM exit and we
+                    //   don't want them enabled for performance reasons while in root mode
+                    // - PE and PG can be freely chosen (by the guest) because we demand
+                    //   unrestricted guest mode support anyway
+                    // - ET is ignored
+                    let must0 = Msr::IA32_VMX_CR0_FIXED1.read()
+                        & !(Cr0Flags::NOT_WRITE_THROUGH | Cr0Flags::CACHE_DISABLE).bits();
+                    let must1 = Msr::IA32_VMX_CR0_FIXED0.read()
+                        & !(Cr0Flags::PAGING | Cr0Flags::PROTECTED_MODE_ENABLE).bits();
+                    VmcsField64Guest::CR0.write((val & must0) | must1)?;
+                    VmcsField64Control::CR0_READ_SHADOW.write(val)?;
+                    VmcsField64Control::CR0_GUEST_HOST_MASK.write(must1 | !must0)?;
+                }
+                3 => VmcsField64Guest::CR3.write(val)?,
+                4 => {
+                    // Retrieve/validate restrictions on CR4
+                    let must0 = Msr::IA32_VMX_CR4_FIXED1.read();
+                    let must1 = Msr::IA32_VMX_CR4_FIXED0.read();
+                    let val = val | Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS.bits();
+                    VmcsField64Guest::CR4.write((val & must0) | must1)?;
+                    VmcsField64Control::CR4_READ_SHADOW.write(val)?;
+                    VmcsField64Control::CR4_GUEST_HOST_MASK.write(must1 | !must0)?;
+                }
+                _ => unreachable!(),
+            };
+            Ok(())
+        })()
+        .expect("Failed to write guest control register")
+    }
+}
+
+impl Debug for Vcpu {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        (|| -> HvResult<Result> {
+            Ok(f.debug_struct("Vcpu")
+                .field("guest_regs", &self.guest_regs)
+                .field("rip", &self.instr_pointer())
+                .field("rsp", &self.stack_pointer())
+                .field("rflags", unsafe {
+                    &RFlags::from_bits_unchecked(self.rflags())
+                })
+                .field("cr0", unsafe { &Cr0Flags::from_bits_unchecked(self.cr(0)) })
+                .field("cr3", &self.cr(3))
+                .field("cr4", unsafe { &Cr4Flags::from_bits_unchecked(self.cr(4)) })
+                .field(
+                    "cs",
+                    &SegmentSelector::from_raw(VmcsField16Guest::CS_SELECTOR.read()?),
+                )
+                .field(
+                    "ds",
+                    &SegmentSelector::from_raw(VmcsField16Guest::DS_SELECTOR.read()?),
+                )
+                .field(
+                    "es",
+                    &SegmentSelector::from_raw(VmcsField16Guest::ES_SELECTOR.read()?),
+                )
+                .field(
+                    "fs",
+                    &SegmentSelector::from_raw(VmcsField16Guest::FS_SELECTOR.read()?),
+                )
+                .field("fs_base", &VmcsField64Guest::FS_BASE.read()?)
+                .field(
+                    "gs",
+                    &SegmentSelector::from_raw(VmcsField16Guest::GS_SELECTOR.read()?),
+                )
+                .field("gs_base", &VmcsField64Guest::GS_BASE.read()?)
+                .field(
+                    "tss",
+                    &SegmentSelector::from_raw(VmcsField16Guest::TR_SELECTOR.read()?),
+                )
+                .finish())
+        })()
+        .unwrap()
+    }
+}
+
 unsafe fn vmx_entry(linux: &LinuxContext) {
     asm!("
         mov rbp, {0}
@@ -433,7 +515,7 @@ unsafe extern "sysv64" fn vmx_exit() -> ! {
         restore_regs_from_stack!(),
         "vmresume",
         const core::mem::size_of::<GuestRegisters>(),
-        sym super::super::vmexit::vmexit_handler,
+        sym crate::arch::vmm::vmexit_handler,
     );
     panic!("VM resume failed: {:?}", Vmcs::instruction_error());
 }

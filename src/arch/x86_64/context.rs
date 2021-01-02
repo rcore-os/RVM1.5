@@ -197,10 +197,6 @@ impl LinuxContext {
 }
 
 impl GuestRegisters {
-    pub fn set_return(&mut self, ret: usize) {
-        self.rax = ret as _
-    }
-
     pub fn return_to_linux(&self, linux: &LinuxContext) -> ! {
         unsafe {
             asm!(

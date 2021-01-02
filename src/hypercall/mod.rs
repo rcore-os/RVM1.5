@@ -4,6 +4,7 @@ use core::sync::atomic::{spin_loop_hint, AtomicUsize, Ordering};
 use bit_field::BitField;
 use numeric_enum_macro::numeric_enum;
 
+use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::GuestPageTable;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
@@ -77,7 +78,7 @@ impl<'a> HyperCall<'a> {
                 Ok(ret) => ret,
                 Err(err) => err.code() as _,
             };
-            self.cpu_data.vcpu.guest_regs.set_return(val);
+            self.cpu_data.vcpu.set_return_val(val);
         }
 
         Ok(())

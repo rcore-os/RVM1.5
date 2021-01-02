@@ -1,8 +1,8 @@
 use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptionInfo};
 use libvmm::vmx::{VmExitInfo, Vmcs, VmxExitReason};
 
-use super::super::exception::ExceptionType;
-use super::super::vmexit::VmExit;
+use crate::arch::exception::ExceptionType;
+use crate::arch::vmm::{VcpuAccessGuestState, VmExit};
 use crate::error::HvResult;
 
 impl VmExit<'_> {
@@ -22,7 +22,7 @@ impl VmExit<'_> {
     }
 
     fn handle_msr_read(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let guest_regs = &mut self.cpu_data.vcpu.guest_regs;
+        let guest_regs = self.cpu_data.vcpu.regs_mut();
         let id = guest_regs.rcx;
         warn!("VM exit: RDMSR({:#x})", id);
         // TODO
@@ -33,7 +33,7 @@ impl VmExit<'_> {
     }
 
     fn handle_msr_write(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let guest_regs = &self.cpu_data.vcpu.guest_regs;
+        let guest_regs = self.cpu_data.vcpu.regs();
         let id = guest_regs.rcx;
         let value = guest_regs.rax | (guest_regs.rdx << 32);
         warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);
@@ -81,31 +81,11 @@ impl VmExit<'_> {
             warn!(
                 "VM exit handler for reason {:?} returned {:?}:\n\
                 {:#x?}\n\n\
-                {}",
-                exit_info.exit_reason,
-                res,
-                exit_info,
-                self.dump_guest_state()
-                    .expect("Failed to dump guest state!")
+                Guest State Dump:\n\
+                {:#x?}",
+                exit_info.exit_reason, res, exit_info, self.cpu_data.vcpu,
             );
         }
         res
-    }
-
-    #[allow(dead_code)]
-    fn test_read_guest_memory(&self, gvaddr: usize, size: usize) -> HvResult {
-        use crate::cell;
-        use crate::memory::addr::phys_to_virt;
-        use crate::memory::GenericPageTable;
-
-        let pt = self.cpu_data.vcpu.guest_page_table();
-        let (gpaddr, _, _) = pt.query(gvaddr)?;
-        let (hpaddr, _, _) = cell::ROOT_CELL.gpm.read().page_table().query(gpaddr)?;
-        let buf = unsafe { core::slice::from_raw_parts(phys_to_virt(hpaddr) as *const u8, size) };
-        println!(
-            "GVA({:#x?}) -> GPA({:#x?}) -> HPA({:#x?}): {:02X?}",
-            gvaddr, gpaddr, hpaddr, buf
-        );
-        Ok(())
     }
 }
