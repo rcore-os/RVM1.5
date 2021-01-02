@@ -1,5 +1,5 @@
-
 ARCH ?= x86_64
+VENDOR ?= intel
 LOG ?=
 
 # do not support debug mode
@@ -11,10 +11,21 @@ OBJDUMP ?= objdump
 OBJCOPY ?= objcopy
 
 build_path := target/$(ARCH)/$(MODE)
-target_elf := $(build_path)/rvm1-5
-target_img := $(build_path)/jailhouse-intel.bin
+target_elf := $(build_path)/rvm15
+target_img := $(build_path)/jailhouse-$(VENDOR).bin
 
-build_args := --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
+features :=
+ifeq ($(ARCH), x86_64)
+ifeq ($(VENDOR), intel)
+features += --features vmx
+else ifeq ($(VENDOR), amd)
+features += --features svm
+else
+$(error VENDOR must be either "intel" or "amd" for x86_64 architecture)
+endif
+endif
+
+build_args := $(features) --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
 ifeq ($(MODE), release)
 build_args += --release
 endif
@@ -33,10 +44,10 @@ disasm:
 	$(OBJDUMP) -d $(target_elf) -M intel | less
 
 clippy:
-	cargo clippy $(build_args) -- -D warnings
+	cargo clippy $(build_args)
 
 test:
-	cargo test
+	cargo test $(features)
 
 fmt:
 	cargo fmt

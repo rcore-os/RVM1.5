@@ -1,4 +1,9 @@
+#[cfg(feature = "vmx")]
 #[path = "vmx/mod.rs"]
+mod vendor;
+
+#[cfg(feature = "svm")]
+#[path = "svm/mod.rs"]
 mod vendor;
 
 use x86_64::registers::control::Cr4Flags;

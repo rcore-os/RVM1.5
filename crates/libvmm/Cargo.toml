@@ -9,6 +9,7 @@ edition = "2018"
 [features]
 default = ["vmx"]
 vmx = ["libvmm_macros/vmx"]
+svm = []
 
 [dependencies]
 bitflags = "1.0.4"

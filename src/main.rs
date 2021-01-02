@@ -8,6 +8,8 @@
 #![feature(concat_idents)]
 #![feature(naked_functions)]
 #![allow(safe_packed_borrows)]
+#![allow(dead_code)] // FIXME
+#![allow(unused_variables)] // FIXME
 
 #[macro_use]
 extern crate alloc;

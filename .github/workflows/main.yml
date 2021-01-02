@@ -17,6 +17,9 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        vendor: [intel, amd]
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
@@ -24,13 +27,14 @@ jobs:
         profile: minimal
         components: rust-src, clippy
     - name: Clippy
-      run: make clippy
+      run: make clippy VENDOR=${{ matrix.vendor }}
 
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
+        vendor: [intel, amd]
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
@@ -39,13 +43,14 @@ jobs:
         components: rust-src, llvm-tools-preview
 
     - name: Build
-      run: make
+      run: make VENDOR=${{ matrix.vendor }}
 
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
+        vendor: [intel, amd]
     steps:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
@@ -54,4 +59,4 @@ jobs:
         components: rust-src
 
     - name: Unit Test
-      run: make test
+      run: make test VENDOR=${{ matrix.vendor }}

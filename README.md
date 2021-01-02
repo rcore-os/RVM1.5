@@ -15,7 +15,7 @@ Supported architecture: x86_64 (Intel VMX).
 ### Build
 
 ```
-make [LOG=warn|info|debug|trace]
+make [VENDOR=intel|amd] [LOG=warn|info|debug|trace]
 ```
 
 TODO...
