@@ -295,7 +295,7 @@ impl Vmcs {
         set: u32,
         clear: u32,
     ) -> VmResult<()> {
-        assert!((set & clear) == 0);
+        assert_eq!((set & clear), 0);
         field.write((old_msr as u32) & !clear | set)
     }
 }

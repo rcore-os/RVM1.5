@@ -209,8 +209,9 @@ impl Vcpu {
         VmcsField64Host::RSP.write(rsp)?; // used for saving guest registers
         self.host_stack_top = cpu_local.stack_top() as _; // the real host stack
         VmcsField64Host::RIP.write(vmx_exit as usize as _)?;
-        assert!(
-            unsafe { (&cpu_local.vcpu.guest_regs as *const GuestRegisters).add(1) } as u64 == rsp
+        assert_eq!(
+            unsafe { (&cpu_local.vcpu.guest_regs as *const GuestRegisters).add(1) as u64 },
+            rsp
         );
         Ok(())
     }
@@ -505,6 +506,7 @@ unsafe fn vmx_entry(linux: &LinuxContext) {
 
 #[naked]
 #[inline(never)]
+#[allow(unsupported_naked_functions)]
 unsafe extern "sysv64" fn vmx_exit() -> ! {
     asm!(
         save_regs_to_stack!(),

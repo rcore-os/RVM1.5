@@ -212,8 +212,8 @@ impl GuestRegisters {
                 linux_rip = in(reg) linux.rip,
                 guest_regs = in(reg) self,
                 guest_regs_size = const core::mem::size_of::<Self>(),
+                options(noreturn),
             );
         }
-        unreachable!()
     }
 }

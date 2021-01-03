@@ -10,7 +10,6 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: nightly-2020-10-08
         override: true
         components: rustfmt
     - name: Check code format
@@ -23,7 +22,6 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: nightly-2020-10-08
         components: rust-src, clippy
     - name: Clippy
       run: make clippy
@@ -38,8 +36,22 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: nightly-2020-10-08
         components: rust-src, llvm-tools-preview
 
     - name: Build
       run: make
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        components: rust-src
+
+    - name: Unit Test
+      run: make test

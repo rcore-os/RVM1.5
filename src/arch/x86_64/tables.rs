@@ -75,7 +75,7 @@ impl GDTStruct {
     }
 
     pub fn load_tss(&mut self, selector: SegmentSelector) {
-        assert!(self.pointer.base != 0);
+        assert_ne!(self.pointer.base, 0);
         SegmentAccessRights::set_descriptor_type(
             &mut Self::table_of_mut(&self.pointer)[selector.index() as usize],
             SegmentAccessRights::TSS_AVAIL,

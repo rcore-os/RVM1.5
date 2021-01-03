@@ -73,7 +73,7 @@ fn handle_nmi() {
 #[naked]
 #[no_mangle]
 #[inline(never)]
-unsafe extern "sysv64" fn common_exception_entry() {
+unsafe extern "sysv64" fn common_exception_entry() -> ! {
     asm!(
         save_regs_to_stack!(),
         "mov rdi, rsp",
@@ -82,6 +82,6 @@ unsafe extern "sysv64" fn common_exception_entry() {
         "add rsp, 16",  // skip num, error_code
         "iretq",
         sym exception_handler,
+        options(noreturn),
     );
-    unreachable!();
 }

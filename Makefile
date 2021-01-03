@@ -14,7 +14,7 @@ build_path := target/$(ARCH)/$(MODE)
 target_elf := $(build_path)/rvm1-5
 target_img := $(build_path)/jailhouse-intel.bin
 
-build_args := --target $(ARCH).json
+build_args := --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
 ifeq ($(MODE), release)
 build_args += --release
 endif
@@ -34,6 +34,9 @@ disasm:
 
 clippy:
 	cargo clippy $(build_args) -- -D warnings
+
+test:
+	cargo test
 
 fmt:
 	cargo fmt

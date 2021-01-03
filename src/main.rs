@@ -1,5 +1,6 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
+#![cfg_attr(test, allow(dead_code))]
 #![feature(asm)]
 #![feature(const_fn)]
 #![feature(lang_items)]
@@ -26,9 +27,11 @@ mod consts;
 mod ffi;
 mod header;
 mod hypercall;
-mod lang;
 mod memory;
 mod percpu;
+
+#[cfg(not(test))]
+mod lang;
 
 #[cfg(target_arch = "x86_64")]
 #[path = "arch/x86_64/mod.rs"]
