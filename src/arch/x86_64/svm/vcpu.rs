@@ -1,6 +1,8 @@
 use core::fmt::{Debug, Formatter, Result};
 
-use libvmm::svm::Vmcb;
+use libvmm::{msr::Msr, svm::Vmcb};
+use x86_64::registers::control::{Cr0, Cr4};
+use x86_64::registers::model_specific::{Efer, EferFlags};
 
 use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
@@ -12,18 +14,48 @@ pub struct Vcpu {
     /// Save guest general registers when VM exits.
     guest_regs: GuestRegisters,
     /// host state-save area.
-    save_area: Frame,
+    host_save_area: Frame,
     /// Virtual machine control block.
-    vmvb: Vmcb,
+    vmcb: Vmcb,
 }
 
 impl Vcpu {
     pub fn new(linux: &LinuxContext, cell: &Cell) -> HvResult<Self> {
-        todo!()
+        super::check_hypervisor_feature()?;
+
+        // TODO: check linux CR0, CR4
+
+        let efer = Efer::read();
+        if efer.contains(EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE) {
+            return hv_result_err!(EBUSY, "SVM is already turned on!");
+        }
+        let host_save_area = Frame::new()?;
+        unsafe { Efer::write(efer | EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE) };
+        unsafe { Msr::VM_HSAVE_PA.write(host_save_area.start_paddr() as _) };
+        info!("successed to turn on SVM.");
+
+        // bring CR0 and CR4 into well-defined states.
+        unsafe {
+            Cr0::write(super::super::HOST_CR0);
+            Cr4::write(super::super::HOST_CR4);
+        }
+
+        let mut ret = Self {
+            guest_regs: Default::default(),
+            host_save_area,
+            vmcb: Default::default(),
+        };
+        ret.vmcb_setup(linux, cell)?;
+
+        Ok(ret)
     }
 
     pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
-        todo!()
+        self.load_vmcb_guest(linux)?;
+        unsafe { Efer::write(Efer::read() - EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE) };
+        unsafe { Msr::VM_HSAVE_PA.write(0) };
+        info!("successed to turn off SVM.");
+        Ok(())
     }
 
     pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
@@ -31,7 +63,7 @@ impl Vcpu {
     }
 
     pub fn deactivate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        todo!()
+        self.guest_regs.return_to_linux(linux)
     }
 
     pub fn inject_fault(&mut self) -> HvResult {
@@ -52,6 +84,16 @@ impl Vcpu {
 
     pub fn guest_page_table(&self) -> GuestPageTable {
         todo!()
+    }
+}
+
+impl Vcpu {
+    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) -> HvResult {
+        Ok(())
+    }
+
+    fn load_vmcb_guest(&self, linux: &mut LinuxContext) -> HvResult {
+        Ok(())
     }
 }
 

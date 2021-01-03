@@ -64,7 +64,7 @@ impl Vcpu {
         let cr4 = linux.cr4;
         // TODO: check reserved bits
         if cr4.contains(Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS) {
-            return hv_result_err!(EIO, "VMX is already turned on!");
+            return hv_result_err!(EBUSY, "VMX is already turned on!");
         }
 
         // Enable VMXON, if required.
@@ -84,25 +84,18 @@ impl Vcpu {
         let vmxon_region = VmxRegion::new(vmx_basic.revision_id, false)?;
         let vmcs_region = VmxRegion::new(vmx_basic.revision_id, false)?;
 
-        let cr0 = Cr0Flags::PAGING
-            | Cr0Flags::WRITE_PROTECT
-            | Cr0Flags::NUMERIC_ERROR
-            | Cr0Flags::TASK_SWITCHED
-            | Cr0Flags::MONITOR_COPROCESSOR
-            | Cr0Flags::PROTECTED_MODE_ENABLE;
-        let mut cr4 = Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
+        // bring CR0 and CR4 into well-defined states.
+        let mut cr4 = super::super::HOST_CR4 | Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS;
         if CpuFeatures::new().has_xsave() {
             cr4 |= Cr4Flags::OSXSAVE;
         }
-
         unsafe {
-            // Update control registers.
-            Cr0::write(cr0);
+            Cr0::write(super::super::HOST_CR0);
             Cr4::write(cr4);
-
-            // Execute VMXON.
-            vmx::vmxon(vmxon_region.paddr() as _)?;
         }
+
+        // Execute VMXON.
+        unsafe { vmx::vmxon(vmxon_region.paddr() as _)? };
         info!("successed to turn on VMX.");
 
         // Setup VMCS.

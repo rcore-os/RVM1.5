@@ -6,7 +6,7 @@ mod vendor;
 #[path = "svm/mod.rs"]
 mod vendor;
 
-use x86_64::registers::control::Cr4Flags;
+use x86_64::registers::control::{Cr0Flags, Cr4Flags};
 
 use super::GuestRegisters;
 use crate::error::HvResult;
@@ -14,9 +14,18 @@ use crate::percpu::PerCpu;
 
 pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
 
+pub const HOST_CR0: Cr0Flags = Cr0Flags::from_bits_truncate(
+    Cr0Flags::PAGING.bits()
+        | Cr0Flags::WRITE_PROTECT.bits()
+        | Cr0Flags::NUMERIC_ERROR.bits()
+        | Cr0Flags::TASK_SWITCHED.bits()
+        | Cr0Flags::MONITOR_COPROCESSOR.bits()
+        | Cr0Flags::PROTECTED_MODE_ENABLE.bits(),
+);
+pub const HOST_CR4: Cr4Flags = Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
+
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
-
     fn regs(&self) -> &GuestRegisters;
     fn regs_mut(&mut self) -> &mut GuestRegisters;
     fn instr_pointer(&self) -> u64;
@@ -30,7 +39,6 @@ pub trait VcpuAccessGuestState {
     }
 
     // Methods only available for x86 cpus:
-
     fn rflags(&self) -> u64;
     fn cr(&self, cr_idx: usize) -> u64;
     fn set_cr(&mut self, cr_idx: usize, val: u64);

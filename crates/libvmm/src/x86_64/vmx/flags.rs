@@ -261,7 +261,6 @@ bitflags! {
 }
 
 /// Control Features in Intel 64 Processor: MSR_IA32_FEATURE_CONTROL
-#[derive(Debug)]
 pub struct FeatureControl;
 
 impl MsrReadWrite for FeatureControl {
