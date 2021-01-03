@@ -1,6 +1,6 @@
 use core::fmt::{Debug, Formatter, Result};
 
-use libvmm::{msr::Msr, svm::Vmcb};
+use libvmm::{msr::Msr, svm::SvmExitCode, svm::Vmcb};
 use x86_64::registers::control::{Cr0, Cr4};
 use x86_64::registers::model_specific::{Efer, EferFlags};
 
@@ -8,15 +8,19 @@ use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
-use crate::memory::Frame;
+use crate::memory::{addr::virt_to_phys, Frame};
+use crate::percpu::PerCpu;
 
+#[repr(C)]
 pub struct Vcpu {
-    /// Save guest general registers when VM exits.
+    /// Save guest general registers when handle VM exits.
     guest_regs: GuestRegisters,
+    /// RSP will be loaded from here when handle VM exits.
+    host_stack_top: u64,
     /// host state-save area.
     host_save_area: Frame,
     /// Virtual machine control block.
-    vmcb: Vmcb,
+    pub(super) vmcb: Vmcb,
 }
 
 impl Vcpu {
@@ -43,23 +47,51 @@ impl Vcpu {
         let mut ret = Self {
             guest_regs: Default::default(),
             host_save_area,
+            host_stack_top: PerCpu::from_local_base().stack_top() as _,
             vmcb: Default::default(),
         };
-        ret.vmcb_setup(linux, cell)?;
+        assert_eq!(
+            unsafe { (&ret.guest_regs as *const GuestRegisters).add(1) as u64 },
+            &ret.host_stack_top as *const _ as u64
+        );
+        ret.vmcb_setup(linux, cell);
 
         Ok(ret)
     }
 
     pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
-        self.load_vmcb_guest(linux)?;
-        unsafe { Efer::write(Efer::read() - EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE) };
-        unsafe { Msr::VM_HSAVE_PA.write(0) };
+        self.load_vmcb_guest(linux);
+        unsafe {
+            asm!("stgi");
+            Efer::write(Efer::read() - EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE);
+            Msr::VM_HSAVE_PA.write(0);
+        }
         info!("successed to turn off SVM.");
         Ok(())
     }
 
     pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        todo!()
+        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().cpu_id);
+        let vmcb_paddr = virt_to_phys(&common_cpu_data.vcpu.vmcb as *const _ as usize);
+        unsafe {
+            asm!("
+                clgi
+                mov rbp, {0}
+                mov rsp, {1}
+                vmload rax
+                jmp {2}",
+                in(reg) linux.rbp,
+                in(reg) &self.host_stack_top as * const _ as usize,
+                sym svm_run,
+                in("r15") linux.r15,
+                in("r14") linux.r14,
+                in("r13") linux.r13,
+                in("r12") linux.r12,
+                in("rbx") linux.rbx,
+                in("rax") vmcb_paddr,
+                options(noreturn),
+            );
+        }
     }
 
     pub fn deactivate_vmm(&self, linux: &LinuxContext) -> HvResult {
@@ -71,63 +103,75 @@ impl Vcpu {
     }
 
     pub fn advance_rip(&mut self, instr_len: u8) -> HvResult {
-        todo!()
+        self.vmcb.save.rip += instr_len as u64;
+        Ok(())
     }
 
-    pub fn guest_is_privileged(&self) -> HvResult<bool> {
-        todo!()
+    pub fn guest_is_privileged(&self) -> bool {
+        self.vmcb.save.cpl == 0
     }
 
     pub fn in_hypercall(&self) -> bool {
-        todo!()
+        use core::convert::TryInto;
+        matches!(
+            self.vmcb.control.exit_code.try_into(),
+            Ok(SvmExitCode::VMMCALL)
+        )
     }
 
     pub fn guest_page_table(&self) -> GuestPageTable {
-        todo!()
+        use crate::memory::{addr::align_down, GenericPageTable};
+        unsafe { GuestPageTable::from_root(align_down(self.vmcb.save.cr3 as _)) }
     }
 }
 
 impl Vcpu {
-    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) -> HvResult {
-        Ok(())
-    }
+    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) {}
 
-    fn load_vmcb_guest(&self, linux: &mut LinuxContext) -> HvResult {
-        Ok(())
-    }
+    fn load_vmcb_guest(&self, linux: &mut LinuxContext) {}
 }
 
 impl VcpuAccessGuestState for Vcpu {
     fn regs(&self) -> &GuestRegisters {
-        todo!()
+        &self.guest_regs
     }
 
     fn regs_mut(&mut self) -> &mut GuestRegisters {
-        todo!()
+        &mut self.guest_regs
     }
 
     fn instr_pointer(&self) -> u64 {
-        todo!()
+        self.vmcb.save.rip
     }
 
     fn stack_pointer(&self) -> u64 {
-        todo!()
+        self.vmcb.save.rsp
     }
 
     fn set_stack_pointer(&mut self, sp: u64) {
-        todo!()
+        self.vmcb.save.rsp = sp
     }
 
     fn rflags(&self) -> u64 {
-        todo!()
+        self.vmcb.save.rflags
     }
 
     fn cr(&self, cr_idx: usize) -> u64 {
-        todo!()
+        match cr_idx {
+            0 => self.vmcb.save.cr0,
+            3 => self.vmcb.save.cr3,
+            4 => self.vmcb.save.cr4,
+            _ => unreachable!(),
+        }
     }
 
     fn set_cr(&mut self, cr_idx: usize, val: u64) {
-        todo!()
+        match cr_idx {
+            0 => self.vmcb.save.cr0 = val,
+            3 => self.vmcb.save.cr3 = val,
+            4 => self.vmcb.save.cr4 = val,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -135,6 +179,27 @@ impl Debug for Vcpu {
     fn fmt(&self, f: &mut Formatter) -> Result {
         f.debug_struct("Vcpu")
             .field("guest_regs", &self.guest_regs)
+            .field("vmcb", &self.vmcb)
             .finish()
     }
+}
+
+#[naked]
+unsafe extern "sysv64" fn svm_run() -> ! {
+    asm!(
+        "vmrun rax",
+        save_regs_to_stack!(),
+        "mov r14, rax",         // save host RAX to r14 for VMRUN
+        "mov r15, rsp",         // save temporary rsp to r15
+        "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
+        "call {1}",
+        "mov rsp, r15",         // load temporary rsp from r15
+        "push r14",             // push saved RAX to restore RAX later
+        restore_regs_from_stack!(),
+        "jmp {2}",
+        const core::mem::size_of::<GuestRegisters>(),
+        sym crate::arch::vmm::vmexit_handler,
+        sym svm_run,
+        options(noreturn),
+    );
 }

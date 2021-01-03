@@ -2,7 +2,7 @@ use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptionInfo, VmExitInfo};
 use libvmm::vmx::VmxExitReason;
 
 use crate::arch::exception::ExceptionType;
-use crate::arch::vmm::{VcpuAccessGuestState, VmExit, VM_EXIT_LEN_RDMSR, VM_EXIT_LEN_WRMSR};
+use crate::arch::vmm::VmExit;
 use crate::error::HvResult;
 
 impl VmExit<'_> {
@@ -18,27 +18,6 @@ impl VmExit<'_> {
             },
             v => warn!("Unhandled Guest Exception: #{:#x}", v),
         }
-        Ok(())
-    }
-
-    fn handle_msr_read(&mut self) -> HvResult {
-        let guest_regs = self.cpu_data.vcpu.regs_mut();
-        let id = guest_regs.rcx;
-        warn!("VM exit: RDMSR({:#x})", id);
-        // TODO
-        guest_regs.rax = 0;
-        guest_regs.rdx = 0;
-        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_RDMSR)?;
-        Ok(())
-    }
-
-    fn handle_msr_write(&mut self) -> HvResult {
-        let guest_regs = self.cpu_data.vcpu.regs();
-        let id = guest_regs.rcx;
-        let value = guest_regs.rax | (guest_regs.rdx << 32);
-        warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);
-        // TODO
-        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_WRMSR)?;
         Ok(())
     }
 

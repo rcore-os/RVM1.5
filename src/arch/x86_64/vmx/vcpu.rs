@@ -28,9 +28,9 @@ pub struct Vcpu {
     _vmxon_region: VmxRegion,
     /// VMCS of this CPU, required by VMX
     vmcs_region: VmxRegion,
-    /// Save guest general registers when VM exits.
+    /// Save guest general registers when handle VM exits.
     guest_regs: GuestRegisters,
-    /// RSP will be loaded from here when VM exits.
+    /// RSP will be loaded from here when handle VM exits.
     host_stack_top: u64,
 }
 
@@ -119,7 +119,20 @@ impl Vcpu {
     }
 
     pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        unsafe { vmx_entry(linux) };
+        unsafe {
+            asm!("
+                mov rbp, {0}
+                vmlaunch",
+                in(reg) linux.rbp,
+                in("r15") linux.r15,
+                in("r14") linux.r14,
+                in("r13") linux.r13,
+                in("r12") linux.r12,
+                in("rbx") linux.rbx,
+                in("rax") 0,
+            );
+        }
+        // Never return if successful
         error!(
             "Activate hypervisor failed: {:?}",
             Vmcs::instruction_error()
@@ -144,10 +157,9 @@ impl Vcpu {
         Ok(())
     }
 
-    pub fn guest_is_privileged(&self) -> HvResult<bool> {
-        let cs_atrr =
-            SegmentAccessRights::from_bits_truncate(VmcsField32Guest::CS_AR_BYTES.read()?);
-        Ok(cs_atrr.dpl() == 0)
+    pub fn guest_is_privileged(&self) -> bool {
+        SegmentAccessRights::from_bits_truncate(VmcsField32Guest::CS_AR_BYTES.read().unwrap()).dpl()
+            == 0
     }
 
     pub fn in_hypercall(&self) -> bool {
@@ -480,21 +492,6 @@ impl Debug for Vcpu {
         })()
         .unwrap()
     }
-}
-
-unsafe fn vmx_entry(linux: &LinuxContext) {
-    asm!("
-        mov rbp, {0}
-        vmlaunch",
-        in(reg) linux.rbp,
-        in("r15") linux.r15,
-        in("r14") linux.r14,
-        in("r13") linux.r13,
-        in("r12") linux.r12,
-        in("rbx") linux.rbx,
-        in("rax") 0,
-    );
-    // Never return if successful
 }
 
 #[naked]

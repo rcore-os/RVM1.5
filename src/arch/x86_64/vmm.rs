@@ -60,6 +60,27 @@ impl VmExit<'_> {
         }
     }
 
+    pub fn handle_msr_read(&mut self) -> HvResult {
+        let guest_regs = self.cpu_data.vcpu.regs_mut();
+        let id = guest_regs.rcx;
+        warn!("VM exit: RDMSR({:#x})", id);
+        // TODO
+        guest_regs.rax = 0;
+        guest_regs.rdx = 0;
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_RDMSR)?;
+        Ok(())
+    }
+
+    pub fn handle_msr_write(&mut self) -> HvResult {
+        let guest_regs = self.cpu_data.vcpu.regs();
+        let id = guest_regs.rcx;
+        let value = guest_regs.rax | (guest_regs.rdx << 32);
+        warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);
+        // TODO
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_WRMSR)?;
+        Ok(())
+    }
+
     pub fn handle_cpuid(&mut self) -> HvResult {
         use super::cpuid::{cpuid, CpuIdEax, FeatureInfoFlags};
         let signature = unsafe { &*("RVMRVMRVMRVM".as_ptr() as *const [u32; 3]) };
@@ -110,8 +131,7 @@ impl VmExit<'_> {
     #[allow(dead_code)]
     fn test_read_guest_memory(&self, gvaddr: usize, size: usize) -> HvResult {
         use crate::cell;
-        use crate::memory::addr::phys_to_virt;
-        use crate::memory::GenericPageTable;
+        use crate::memory::{addr::phys_to_virt, GenericPageTable};
 
         let pt = self.cpu_data.vcpu.guest_page_table();
         let (gpaddr, _, _) = pt.query(gvaddr)?;

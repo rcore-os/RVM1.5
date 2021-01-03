@@ -47,7 +47,7 @@ impl<'a> HyperCall<'a> {
             }
         };
 
-        if self.cpu_data.vcpu.guest_is_privileged()? {
+        if self.cpu_data.vcpu.guest_is_privileged() {
             if !code.is_privileged() {
                 warn!("Cannot call {:?} in privileged mode", code);
                 self.cpu_data.fault()?;
