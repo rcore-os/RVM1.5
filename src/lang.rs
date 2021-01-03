@@ -12,7 +12,7 @@ fn try_handle_panic(cpu_data: &mut PerCpu) -> HvResult {
     };
     match cpu_data.state {
         CpuState::HvEnabled => cpu_data.deactivate_vmm(ret_code)?,
-        _ => loop {},
+        _ => return hv_result_err!(EIO, "Hypervisor is not enabled!"),
     }
     Ok(())
 }

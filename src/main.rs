@@ -85,10 +85,10 @@ fn primary_init_early(cpu_id: usize) -> HvResult {
     Ok(())
 }
 
-fn primary_init_late() -> HvResult {
+fn primary_init_late() {
     info!("Primary CPU init late...");
+    // Do nothing...
     INIT_LATE_OK.store(1, Ordering::Release);
-    Ok(())
 }
 
 fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
@@ -114,7 +114,7 @@ fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
     wait_for_other_completed(&INITED_CPUS, online_cpus)?;
 
     if is_primary {
-        primary_init_late()?;
+        primary_init_late();
     } else {
         wait_for_other_completed(&INIT_LATE_OK, 1)?;
     }

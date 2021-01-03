@@ -17,7 +17,7 @@ fn gen_vector_asm() -> Result<()> {
     writeln!(f, ".intel_syntax noprefix")?;
     for i in 0..256 {
         writeln!(f, "__entry{}:", i)?;
-        if !(i == 8 || (i >= 10 && i <= 14) || i == 17) {
+        if !(i == 8 || (10..=14).contains(&i) || i == 17) {
             writeln!(f, "\tpush 0")?;
         }
         writeln!(f, "\tpush {}", i)?;

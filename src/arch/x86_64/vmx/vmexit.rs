@@ -1,5 +1,5 @@
 use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptionInfo, VmExitInfo};
-use libvmm::vmx::{Vmcs, VmxExitReason};
+use libvmm::vmx::VmxExitReason;
 
 use crate::arch::exception::ExceptionType;
 use crate::arch::vmm::{VcpuAccessGuestState, VmExit, VM_EXIT_LEN_RDMSR, VM_EXIT_LEN_WRMSR};
