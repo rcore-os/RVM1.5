@@ -230,7 +230,7 @@ impl Vcpu {
 
         self.set_cr(0, linux.cr0.bits());
         self.set_cr(4, linux.cr4.bits());
-        VmcsField64Guest::CR3.write(linux.cr3)?;
+        self.set_cr(3, linux.cr3);
 
         set_guest_segment!(linux.cs, CS);
         set_guest_segment!(linux.ds, DS);
@@ -238,9 +238,8 @@ impl Vcpu {
         set_guest_segment!(linux.fs, FS);
         set_guest_segment!(linux.gs, GS);
         set_guest_segment!(linux.tss, TR);
-        let invalid_seg = Segment::invalid();
-        set_guest_segment!(invalid_seg, SS);
-        set_guest_segment!(invalid_seg, LDTR);
+        set_guest_segment!(Segment::invalid(), SS);
+        set_guest_segment!(Segment::invalid(), LDTR);
 
         VmcsField64Guest::GDTR_BASE.write(linux.gdt.base)?;
         VmcsField32Guest::GDTR_LIMIT.write(linux.gdt.limit as _)?;

@@ -1,15 +1,19 @@
 use core::fmt::{Debug, Formatter, Result};
 
-use libvmm::{msr::Msr, svm::SvmExitCode, svm::Vmcb};
+use libvmm::msr::Msr;
+use libvmm::svm::{vmcb::VmcbSegment, SvmExitCode, SvmIntercept, Vmcb};
+use x86::{segmentation, segmentation::SegmentSelector, task};
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
 use x86_64::registers::model_specific::{Efer, EferFlags};
 use x86_64::registers::rflags::RFlags;
+use x86_64::structures::DescriptorTablePointer;
 
+use crate::arch::segmentation::Segment;
 use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
-use crate::memory::{addr::virt_to_phys, Frame};
+use crate::memory::{addr::virt_to_phys, Frame, GenericPageTable};
 use crate::percpu::PerCpu;
 
 #[repr(C)]
@@ -72,8 +76,10 @@ impl Vcpu {
     }
 
     pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
+        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().cpu_id);
+        let vmcb_paddr = virt_to_phys(&common_cpu_data.vcpu.vmcb as *const _ as usize);
         let regs = self.regs_mut();
-        // regx.rax = VMCB paddr
+        regs.rax = vmcb_paddr as _;
         regs.rbx = linux.rbx;
         regs.rbp = linux.rbp;
         regs.r12 = linux.r12;
@@ -87,7 +93,7 @@ impl Vcpu {
                 restore_regs_from_stack!(),
                 "vmload rax",
                 "jmp {1}",
-                in(reg) &self.guest_regs as * const _ as usize,
+                in(reg) regs as * const _ as usize,
                 sym svm_run,
                 options(noreturn),
             );
@@ -120,18 +126,104 @@ impl Vcpu {
     }
 
     pub fn guest_page_table(&self) -> GuestPageTable {
-        use crate::memory::{addr::align_down, GenericPageTable};
+        use crate::memory::addr::align_down;
         unsafe { GuestPageTable::from_root(align_down(self.vmcb.save.cr3 as _)) }
     }
 }
 
 impl Vcpu {
-    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) {
-        let vmcb_paddr = virt_to_phys(&self.vmcb as *const _ as usize);
-        self.guest_regs.rax = vmcb_paddr as _;
+    fn set_vmcb_dtr(vmcb_seg: &mut VmcbSegment, dtr: &DescriptorTablePointer) {
+        vmcb_seg.limit = dtr.limit as u32 & 0xffff;
+        vmcb_seg.base = dtr.base;
     }
 
-    fn load_vmcb_guest(&self, linux: &mut LinuxContext) {}
+    fn set_vmcb_segment(vmcb_seg: &mut VmcbSegment, seg: &Segment) {
+        vmcb_seg.selector = seg.selector.bits();
+        vmcb_seg.attr = seg.access_rights.as_svm_segment_attributes();
+        vmcb_seg.limit = seg.limit;
+        vmcb_seg.base = seg.base;
+    }
+
+    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) {
+        self.set_cr(0, linux.cr0.bits());
+        self.set_cr(4, linux.cr4.bits());
+        self.set_cr(3, linux.cr3);
+
+        let vmcb = &mut self.vmcb.save;
+        Self::set_vmcb_segment(&mut vmcb.cs, &linux.cs);
+        Self::set_vmcb_segment(&mut vmcb.ds, &linux.ds);
+        Self::set_vmcb_segment(&mut vmcb.es, &linux.es);
+        Self::set_vmcb_segment(&mut vmcb.fs, &linux.fs);
+        Self::set_vmcb_segment(&mut vmcb.gs, &linux.gs);
+        Self::set_vmcb_segment(&mut vmcb.tr, &linux.tss);
+        Self::set_vmcb_segment(&mut vmcb.ss, &Segment::invalid());
+        Self::set_vmcb_segment(&mut vmcb.ldtr, &Segment::invalid());
+        Self::set_vmcb_dtr(&mut vmcb.idtr, &linux.idt);
+        Self::set_vmcb_dtr(&mut vmcb.gdtr, &linux.gdt);
+        vmcb.cpl = 0; // Linux runs in ring 0 before migration
+        vmcb.rflags = 0x2;
+        vmcb.rip = linux.rip;
+        vmcb.rsp = linux.rsp;
+        vmcb.rax = 0;
+        vmcb.sysenter_cs = Msr::IA32_SYSENTER_CS.read();
+        vmcb.sysenter_eip = Msr::IA32_SYSENTER_EIP.read();
+        vmcb.sysenter_esp = Msr::IA32_SYSENTER_ESP.read();
+        vmcb.star = Msr::IA32_STAR.read();
+        vmcb.lstar = Msr::IA32_LSTAR.read();
+        vmcb.cstar = Msr::IA32_CSTAR.read();
+        vmcb.sfmask = Msr::IA32_FMASK.read();
+        vmcb.kernel_gs_base = Msr::IA32_KERNEL_GSBASE.read();
+        vmcb.efer = linux.efer | EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits(); // Make the hypervisor visible
+        vmcb.g_pat = linux.pat;
+        vmcb.dr7 = 0x400;
+        vmcb.dr6 = 0xffff_0ff0;
+
+        let vmcb = &mut self.vmcb.control;
+        vmcb.intercept_exceptions = 0;
+        vmcb.np_enable = 1;
+        vmcb.guest_asid = 1; // No more than one guest owns the CPU
+        vmcb.clean_bits = 0; // Explicitly mark all of the state as new
+        vmcb.nest_cr3 = cell.gpm.read().page_table().root_paddr() as _;
+        vmcb.tlb_control = 1;
+
+        self.vmcb.set_intercept(SvmIntercept::NMI);
+        self.vmcb.set_intercept(SvmIntercept::CPUID);
+        self.vmcb.set_intercept(SvmIntercept::SHUTDOWN);
+        self.vmcb.set_intercept(SvmIntercept::VMRUN);
+        self.vmcb.set_intercept(SvmIntercept::VMMCALL);
+        self.vmcb.set_intercept(SvmIntercept::VMLOAD);
+        self.vmcb.set_intercept(SvmIntercept::VMSAVE);
+        self.vmcb.set_intercept(SvmIntercept::STGI);
+        self.vmcb.set_intercept(SvmIntercept::CLGI);
+        self.vmcb.set_intercept(SvmIntercept::SKINIT);
+    }
+
+    fn load_vmcb_guest(&self, linux: &mut LinuxContext) {
+        let vmcb = &self.vmcb.save;
+        linux.rip = vmcb.rip;
+        linux.rsp = vmcb.rsp;
+        linux.cr0 = Cr0Flags::from_bits_truncate(vmcb.cr0);
+        linux.cr3 = vmcb.cr3;
+        linux.cr4 = Cr4Flags::from_bits_truncate(vmcb.cr4);
+
+        linux.cs.selector = SegmentSelector::from_raw(vmcb.cs.selector);
+        linux.ds.selector = SegmentSelector::from_raw(vmcb.ds.selector);
+        linux.es.selector = SegmentSelector::from_raw(vmcb.es.selector);
+
+        linux.gdt.base = vmcb.gdtr.base;
+        linux.gdt.limit = vmcb.gdtr.limit as _;
+        linux.idt.base = vmcb.idtr.base;
+        linux.idt.limit = vmcb.idtr.limit as _;
+
+        linux.efer = vmcb.efer & !EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits();
+
+        // We should load the following register state manuly since we not use VMLOAD/VMSAVE
+        linux.fs.selector = segmentation::fs();
+        linux.gs.selector = segmentation::gs();
+        linux.tss.selector = task::tr();
+        linux.fs.base = Msr::IA32_FS_BASE.read();
+        linux.gs.base = Msr::IA32_GS_BASE.read();
+    }
 }
 
 impl VcpuAccessGuestState for Vcpu {
@@ -170,7 +262,7 @@ impl VcpuAccessGuestState for Vcpu {
 
     fn set_cr(&mut self, cr_idx: usize, val: u64) {
         match cr_idx {
-            0 => self.vmcb.save.cr0 = val,
+            0 => self.vmcb.save.cr0 = val & !Cr0Flags::NOT_WRITE_THROUGH.bits(),
             3 => self.vmcb.save.cr3 = val,
             4 => self.vmcb.save.cr4 = val,
             _ => unreachable!(),
@@ -204,7 +296,7 @@ unsafe extern "sysv64" fn svm_run() -> ! {
         "mov r15, rsp",         // save temporary RSP to r15
         "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
         "call {1}",
-        "mov rsp, r15",         // load temporary RSP from r15
+        "lea rsp, [r15 + 8]",   // load temporary RSP and skip one place for RAX
         "push r14",             // push saved RAX to restore RAX later
         restore_regs_from_stack!(),
         "jmp {2}",

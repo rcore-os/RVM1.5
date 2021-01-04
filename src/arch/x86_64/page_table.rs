@@ -67,11 +67,11 @@ impl GenericPTE for PTE {
         PTE::set_addr(self, X86PhysAddr::new(paddr as _), self.flags())
     }
     fn set_flags(&mut self, flags: MemFlags, is_huge: bool) {
-        let mut flags = flags.into();
+        let mut flags: PTF = flags.into();
         if is_huge {
             flags |= PTF::HUGE_PAGE;
         }
-        PTE::set_flags(self, flags)
+        PTE::set_flags(self, flags | PTF::USER_ACCESSIBLE) // FIXME: hack for SVM NPT
     }
     fn set_table(&mut self, paddr: PhysAddr) {
         PTE::set_addr(

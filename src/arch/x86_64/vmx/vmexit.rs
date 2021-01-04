@@ -38,8 +38,7 @@ impl VmExit<'_> {
         trace!("VM exit: {:#x?}", exit_info);
 
         if exit_info.entry_failure {
-            error!("VM entry failed: {:#x?}", exit_info);
-            return hv_result_err!(EIO);
+            panic!("VM entry failed: {:#x?}", exit_info);
         }
         // self.test_read_guest_memory(
         //     exit_info.guest_rip as _,

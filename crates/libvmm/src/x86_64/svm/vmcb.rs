@@ -1,6 +1,8 @@
 use core::fmt::{Debug, Formatter, Result};
 use core::mem::MaybeUninit;
 
+use super::{SvmExitCode, SvmIntercept};
+
 #[repr(C, align(1024))]
 pub struct VmcbControlArea {
     pub intercept_cr: u32,
@@ -26,20 +28,21 @@ pub struct VmcbControlArea {
     pub exit_info_1: u64,
     pub exit_info_2: u64,
     pub exit_int_info: u64,
-    pub nested_ctl: u64,
+    pub np_enable: u8,
+    _reserved4: [u8; 3],
     pub avic_vapic_bar: u64,
-    _reserved4: [u8; 8],
+    _reserved5: [u8; 8],
     pub event_inj: u32,
     pub event_inj_err: u32,
     pub nest_cr3: u64,
     pub lbr_control: u64,
     pub clean_bits: u32,
-    _reserved5: u32,
+    _reserved6: u32,
     pub next_rip: u64,
     pub insn_len: u8,
     pub insn_bytes: [u8; 15],
     pub avic_backing_page: u64,
-    _reserved6: [u8; 8],
+    _reserved7: [u8; 8],
     pub avic_logical_id: u64,
     pub avic_physical_id: u64,
 }
@@ -108,6 +111,40 @@ pub struct Vmcb {
     pub save: VmcbStateSaveArea,
 }
 
+impl Vmcb {
+    pub fn set_intercept(&mut self, which: SvmIntercept) {
+        let val = which as u8;
+        match val {
+            0x60..=0x7F => self.control.intercept_vector3 |= 1 << (val - 0x60),
+            0x80..=0x8F => self.control.intercept_vector4 |= 1 << (val - 0x80),
+            0xA0..=0xA4 => self.control.intercept_vector5 |= 1 << (val - 0xA0),
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct VmExitInfo {
+    pub exit_code: core::result::Result<SvmExitCode, u64>,
+    pub exit_info_1: u64,
+    pub exit_info_2: u64,
+    pub guest_rip: u64,
+    pub next_rip: u64,
+}
+
+impl VmExitInfo {
+    pub fn new(vmcb: &Vmcb) -> Self {
+        use core::convert::TryInto;
+        Self {
+            exit_code: vmcb.control.exit_code.try_into(),
+            exit_info_1: vmcb.control.exit_info_1,
+            exit_info_2: vmcb.control.exit_info_2,
+            guest_rip: vmcb.save.rip,
+            next_rip: vmcb.control.next_rip,
+        }
+    }
+}
+
 impl Default for Vmcb {
     fn default() -> Self {
         unsafe { MaybeUninit::zeroed().assume_init() }
@@ -137,7 +174,7 @@ impl Debug for VmcbControlArea {
             .field("exit_info_1", &self.exit_info_1)
             .field("exit_info_2", &self.exit_info_2)
             .field("exit_int_info", &self.exit_int_info)
-            .field("nested_ctl", &self.nested_ctl)
+            .field("np_enable", &self.np_enable)
             .field("avic_vapic_bar", &self.avic_vapic_bar)
             .field("event_inj", &self.event_inj)
             .field("event_inj_err", &self.event_inj_err)
@@ -248,7 +285,7 @@ mod tests {
         assert_vmcb_ctrl_offset!(exit_info_1, 0x78);
         assert_vmcb_ctrl_offset!(exit_info_2, 0x80);
         assert_vmcb_ctrl_offset!(exit_int_info, 0x88);
-        assert_vmcb_ctrl_offset!(nested_ctl, 0x90);
+        assert_vmcb_ctrl_offset!(np_enable, 0x90);
         assert_vmcb_ctrl_offset!(avic_vapic_bar, 0x98);
         assert_vmcb_ctrl_offset!(event_inj, 0xA8);
         assert_vmcb_ctrl_offset!(event_inj_err, 0xAC);

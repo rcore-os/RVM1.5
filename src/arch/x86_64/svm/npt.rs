@@ -1,17 +1,12 @@
 use x86_64::structures::paging::page_table::PageTableEntry as PTE;
 
-use crate::memory::{Level4PageTable, PagingInstr, PhysAddr, VirtAddr};
+use crate::memory::{GuestPhysAddr, HostPhysAddr, Level4PageTable, PagingInstr};
 
 pub struct NPTInstr;
 
 impl PagingInstr for NPTInstr {
-    unsafe fn activate(root_paddr: PhysAddr) {
-        todo!()
-    }
-
-    fn flush(vaddr: Option<usize>) {
-        todo!()
-    }
+    unsafe fn activate(_root_paddr: HostPhysAddr) {}
+    fn flush(_vaddr: Option<usize>) {}
 }
 
-pub type NestedPageTable = Level4PageTable<VirtAddr, PTE, NPTInstr>;
+pub type NestedPageTable = Level4PageTable<GuestPhysAddr, PTE, NPTInstr>;

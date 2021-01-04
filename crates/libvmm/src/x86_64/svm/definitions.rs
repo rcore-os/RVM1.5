@@ -1,6 +1,6 @@
 use core::convert::TryFrom;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum SvmExitCode {
     CR_READ(u8),
@@ -142,4 +142,66 @@ impl TryFrom<u64> for SvmExitCode {
             _ => Err(val),
         }
     }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum SvmIntercept {
+    // 0x0C (vector 3)
+    INTR = 0x60,
+    NMI = 0x61,
+    SMI = 0x62,
+    INIT = 0x63,
+    VINTR = 0x64,
+    CR0_SEL_WRITE = 0x65,
+    IDTR_READ = 0x66,
+    GDTR_READ = 0x67,
+    LDTR_READ = 0x68,
+    TR_READ = 0x69,
+    IDTR_WRITE = 0x6A,
+    GDTR_WRITE = 0x6B,
+    LDTR_WRITE = 0x6C,
+    TR_WRITE = 0x6D,
+    RDTSC = 0x6E,
+    RDPMC = 0x6F,
+    PUSHF = 0x70,
+    POPF = 0x71,
+    CPUID = 0x72,
+    RSM = 0x73,
+    IRET = 0x74,
+    SWINT = 0x75,
+    INVD = 0x76,
+    PAUSE = 0x77,
+    HLT = 0x78,
+    INVLPG = 0x79,
+    INVLPGA = 0x7A,
+    IOIO_PROT = 0x7B,
+    MSR_PROT = 0x7C,
+    TASK_SWITCH = 0x7D,
+    FERR_FREEZE = 0x7E,
+    SHUTDOWN = 0x7F,
+    // 0x10 (vector 4)
+    VMRUN = 0x80,
+    VMMCALL = 0x81,
+    VMLOAD = 0x82,
+    VMSAVE = 0x83,
+    STGI = 0x84,
+    CLGI = 0x85,
+    SKINIT = 0x86,
+    RDTSCP = 0x87,
+    ICEBP = 0x88,
+    WBINVD = 0x89,
+    MONITOR = 0x8A,
+    MWAIT = 0x8B,
+    MWAIT_CONDITIONAL = 0x8C,
+    XSETBV = 0x8D,
+    RDPRU = 0x8E,
+    EFER_WRITE_TRAP = 0x8F,
+    // 0x14 (vector 5)
+    INVLPGB = 0xA0,
+    INVLPGB_ILLEGAL = 0xA1,
+    INVPCID = 0xA2,
+    MCOMMIT = 0xA3,
+    TLBSYNC = 0xA4,
 }

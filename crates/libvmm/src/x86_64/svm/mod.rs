@@ -1,6 +1,6 @@
 mod definitions;
 pub mod flags;
-mod vmcb;
+pub mod vmcb;
 
-pub use definitions::SvmExitCode;
-pub use vmcb::Vmcb;
+pub use definitions::{SvmExitCode, SvmIntercept};
+pub use vmcb::{VmExitInfo, Vmcb};
