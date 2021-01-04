@@ -13,7 +13,7 @@ impl VmExit<'_> {
         let exit_code = match SvmExitCode::try_from(vcpu.vmcb.control.exit_code) {
             Ok(code) => code,
             Err(code) => {
-                error!("Unknown VM-exit code: {:#x}", code);
+                error!("Unknown #VMEXIT exit code: {:#x}", code);
                 return hv_result_err!(EIO);
             }
         };
@@ -32,10 +32,13 @@ impl VmExit<'_> {
         let vcpu = &mut self.cpu_data.vcpu;
         if res.is_err() {
             warn!(
-                "VM exit handler for exit-code {:?} returned {:?}:\n\n\
-                Guest State and VMCB Dump:\n\
+                "#VMEXIT handler returned {:?}:\n\
+                EXITCODE: {:?}\n\
+                EXITINFO1: {:#x}\n\
+                EXITINFO2: {:#x}\n\n\
+                Guest State Dump:\n\
                 {:#x?}",
-                exit_code, res, vcpu,
+                res, exit_code, vcpu.vmcb.control.exit_info_1, vcpu.vmcb.control.exit_info_2, vcpu,
             );
         }
         vcpu.vmcb.save.rax = vcpu.regs().rax;

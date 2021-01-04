@@ -14,16 +14,6 @@ use crate::percpu::PerCpu;
 
 pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
 
-pub const HOST_CR0: Cr0Flags = Cr0Flags::from_bits_truncate(
-    Cr0Flags::PAGING.bits()
-        | Cr0Flags::WRITE_PROTECT.bits()
-        | Cr0Flags::NUMERIC_ERROR.bits()
-        | Cr0Flags::TASK_SWITCHED.bits()
-        | Cr0Flags::MONITOR_COPROCESSOR.bits()
-        | Cr0Flags::PROTECTED_MODE_ENABLE.bits(),
-);
-pub const HOST_CR4: Cr4Flags = Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
-
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
     fn regs(&self) -> &GuestRegisters;
@@ -44,10 +34,20 @@ pub trait VcpuAccessGuestState {
     fn set_cr(&mut self, cr_idx: usize, val: u64);
 }
 
-pub const VM_EXIT_LEN_CPUID: u8 = 2;
-pub const VM_EXIT_LEN_RDMSR: u8 = 2;
-pub const VM_EXIT_LEN_WRMSR: u8 = 2;
-pub const VM_EXIT_LEN_HYPERCALL: u8 = 3;
+const VM_EXIT_LEN_CPUID: u8 = 2;
+const VM_EXIT_LEN_RDMSR: u8 = 2;
+const VM_EXIT_LEN_WRMSR: u8 = 2;
+const VM_EXIT_LEN_HYPERCALL: u8 = 3;
+
+const HOST_CR0: Cr0Flags = Cr0Flags::from_bits_truncate(
+    Cr0Flags::PAGING.bits()
+        | Cr0Flags::WRITE_PROTECT.bits()
+        | Cr0Flags::NUMERIC_ERROR.bits()
+        | Cr0Flags::TASK_SWITCHED.bits()
+        | Cr0Flags::MONITOR_COPROCESSOR.bits()
+        | Cr0Flags::PROTECTED_MODE_ENABLE.bits(),
+);
+const HOST_CR4: Cr4Flags = Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
 
 pub(super) struct VmExit<'a> {
     pub cpu_data: &'a mut PerCpu,

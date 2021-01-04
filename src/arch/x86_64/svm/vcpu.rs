@@ -1,8 +1,9 @@
 use core::fmt::{Debug, Formatter, Result};
 
 use libvmm::{msr::Msr, svm::SvmExitCode, svm::Vmcb};
-use x86_64::registers::control::{Cr0, Cr4};
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
 use x86_64::registers::model_specific::{Efer, EferFlags};
+use x86_64::registers::rflags::RFlags;
 
 use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
@@ -70,25 +71,24 @@ impl Vcpu {
         Ok(())
     }
 
-    pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().cpu_id);
-        let vmcb_paddr = virt_to_phys(&common_cpu_data.vcpu.vmcb as *const _ as usize);
+    pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
+        let regs = self.regs_mut();
+        // regx.rax = VMCB paddr
+        regs.rbx = linux.rbx;
+        regs.rbp = linux.rbp;
+        regs.r12 = linux.r12;
+        regs.r13 = linux.r13;
+        regs.r14 = linux.r14;
+        regs.r15 = linux.r15;
         unsafe {
-            asm!("
-                clgi
-                mov rbp, {0}
-                mov rsp, {1}
-                vmload rax
-                jmp {2}",
-                in(reg) linux.rbp,
-                in(reg) &self.host_stack_top as * const _ as usize,
+            asm!(
+                "clgi",
+                "mov rsp, {0}",
+                restore_regs_from_stack!(),
+                "vmload rax",
+                "jmp {1}",
+                in(reg) &self.guest_regs as * const _ as usize,
                 sym svm_run,
-                in("r15") linux.r15,
-                in("r14") linux.r14,
-                in("r13") linux.r13,
-                in("r12") linux.r12,
-                in("rbx") linux.rbx,
-                in("rax") vmcb_paddr,
                 options(noreturn),
             );
         }
@@ -126,7 +126,10 @@ impl Vcpu {
 }
 
 impl Vcpu {
-    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) {}
+    fn vmcb_setup(&mut self, linux: &LinuxContext, cell: &Cell) {
+        let vmcb_paddr = virt_to_phys(&self.vmcb as *const _ as usize);
+        self.guest_regs.rax = vmcb_paddr as _;
+    }
 
     fn load_vmcb_guest(&self, linux: &mut LinuxContext) {}
 }
@@ -179,7 +182,15 @@ impl Debug for Vcpu {
     fn fmt(&self, f: &mut Formatter) -> Result {
         f.debug_struct("Vcpu")
             .field("guest_regs", &self.guest_regs)
-            .field("vmcb", &self.vmcb)
+            .field("rip", &self.instr_pointer())
+            .field("rsp", &self.stack_pointer())
+            .field("rflags", unsafe {
+                &RFlags::from_bits_unchecked(self.rflags())
+            })
+            .field("cr0", unsafe { &Cr0Flags::from_bits_unchecked(self.cr(0)) })
+            .field("cr3", &self.cr(3))
+            .field("cr4", unsafe { &Cr4Flags::from_bits_unchecked(self.cr(4)) })
+            .field("cs", &self.vmcb.save.cs)
             .finish()
     }
 }
@@ -190,10 +201,10 @@ unsafe extern "sysv64" fn svm_run() -> ! {
         "vmrun rax",
         save_regs_to_stack!(),
         "mov r14, rax",         // save host RAX to r14 for VMRUN
-        "mov r15, rsp",         // save temporary rsp to r15
+        "mov r15, rsp",         // save temporary RSP to r15
         "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
         "call {1}",
-        "mov rsp, r15",         // load temporary rsp from r15
+        "mov rsp, r15",         // load temporary RSP from r15
         "push r14",             // push saved RAX to restore RAX later
         restore_regs_from_stack!(),
         "jmp {2}",

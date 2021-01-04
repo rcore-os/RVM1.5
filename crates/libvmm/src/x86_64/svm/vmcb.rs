@@ -79,7 +79,9 @@ pub struct VmcbStateSaveArea {
     pub rip: u64,
     _reserved4: [u8; 88],
     pub rsp: u64,
-    _reserved5: [u8; 24],
+    pub s_cet: u64,
+    pub ssp: u64,
+    pub isst_addr: u64,
     pub rax: u64,
     pub star: u64,
     pub lstar: u64,
@@ -90,7 +92,7 @@ pub struct VmcbStateSaveArea {
     pub sysenter_esp: u64,
     pub sysenter_eip: u64,
     pub cr2: u64,
-    _reserved6: [u8; 32],
+    _reserved5: [u8; 32],
     pub g_pat: u64,
     pub dbgctl: u64,
     pub br_from: u64,
@@ -175,6 +177,9 @@ impl Debug for VmcbStateSaveArea {
             .field("rflags", &self.rflags)
             .field("rip", &self.rip)
             .field("rsp", &self.rsp)
+            .field("s_cet", &self.s_cet)
+            .field("ssp", &self.ssp)
+            .field("isst_addr", &self.isst_addr)
             .field("rax", &self.rax)
             .field("star", &self.star)
             .field("lstar", &self.lstar)
@@ -200,6 +205,18 @@ mod tests {
     use super::*;
     use core::mem::size_of;
 
+    macro_rules! assert_vmcb_ctrl_offset {
+        ($field: ident, &offset: expr) => {
+            assert_eq!(offset_of!(VmcbControlArea, $field), $offset)
+        };
+    }
+
+    macro_rules! assert_vmcb_save_offset {
+        ($field: ident, &offset: expr) => {
+            assert_eq!(offset_of!(VmcbStateSaveArea, $field), $offset)
+        };
+    }
+
     #[test]
     fn test_vmcb_size() {
         assert_eq!(size_of::<Vmcb>(), 0x1000);
@@ -211,75 +228,78 @@ mod tests {
     fn test_vmcb_layout() {
         let f = Vmcb::default();
         println!("{:#x?}", f);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_cr), 0x00);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_dr), 0x04);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_exceptions), 0x08);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_vector3), 0x0C);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_vector4), 0x10);
-        assert_eq!(offset_of!(VmcbControlArea, intercept_vector5), 0x14);
-        assert_eq!(offset_of!(VmcbControlArea, pause_filter_thresh), 0x3C);
-        assert_eq!(offset_of!(VmcbControlArea, pause_filter_count), 0x3E);
-        assert_eq!(offset_of!(VmcbControlArea, iopm_base_pa), 0x40);
-        assert_eq!(offset_of!(VmcbControlArea, msrpm_base_pa), 0x48);
-        assert_eq!(offset_of!(VmcbControlArea, tsc_offset), 0x50);
-        assert_eq!(offset_of!(VmcbControlArea, guest_asid), 0x58);
-        assert_eq!(offset_of!(VmcbControlArea, tlb_control), 0x5C);
-        assert_eq!(offset_of!(VmcbControlArea, int_control), 0x60);
-        assert_eq!(offset_of!(VmcbControlArea, int_vector), 0x64);
-        assert_eq!(offset_of!(VmcbControlArea, int_state), 0x68);
-        assert_eq!(offset_of!(VmcbControlArea, exit_code), 0x70);
-        assert_eq!(offset_of!(VmcbControlArea, exit_info_1), 0x78);
-        assert_eq!(offset_of!(VmcbControlArea, exit_info_2), 0x80);
-        assert_eq!(offset_of!(VmcbControlArea, exit_int_info), 0x88);
-        assert_eq!(offset_of!(VmcbControlArea, nested_ctl), 0x90);
-        assert_eq!(offset_of!(VmcbControlArea, avic_vapic_bar), 0x98);
-        assert_eq!(offset_of!(VmcbControlArea, event_inj), 0xA8);
-        assert_eq!(offset_of!(VmcbControlArea, event_inj_err), 0xAC);
-        assert_eq!(offset_of!(VmcbControlArea, nest_cr3), 0xB0);
-        assert_eq!(offset_of!(VmcbControlArea, lbr_control), 0xB8);
-        assert_eq!(offset_of!(VmcbControlArea, clean_bits), 0xC0);
-        assert_eq!(offset_of!(VmcbControlArea, next_rip), 0xC8);
-        assert_eq!(offset_of!(VmcbControlArea, insn_len), 0xD0);
-        assert_eq!(offset_of!(VmcbControlArea, insn_bytes), 0xD1);
-        assert_eq!(offset_of!(VmcbControlArea, avic_backing_page), 0xE0);
-        assert_eq!(offset_of!(VmcbControlArea, avic_logical_id), 0xF0);
-        assert_eq!(offset_of!(VmcbControlArea, avic_physical_id), 0xF8);
+        assert_vmcb_ctrl_offset!(intercept_cr, 0x00);
+        assert_vmcb_ctrl_offset!(intercept_dr, 0x04);
+        assert_vmcb_ctrl_offset!(intercept_exceptions, 0x08);
+        assert_vmcb_ctrl_offset!(intercept_vector3, 0x0C);
+        assert_vmcb_ctrl_offset!(intercept_vector4, 0x10);
+        assert_vmcb_ctrl_offset!(intercept_vector5, 0x14);
+        assert_vmcb_ctrl_offset!(pause_filter_thresh, 0x3C);
+        assert_vmcb_ctrl_offset!(pause_filter_count, 0x3E);
+        assert_vmcb_ctrl_offset!(iopm_base_pa, 0x40);
+        assert_vmcb_ctrl_offset!(msrpm_base_pa, 0x48);
+        assert_vmcb_ctrl_offset!(tsc_offset, 0x50);
+        assert_vmcb_ctrl_offset!(guest_asid, 0x58);
+        assert_vmcb_ctrl_offset!(tlb_control, 0x5C);
+        assert_vmcb_ctrl_offset!(int_control, 0x60);
+        assert_vmcb_ctrl_offset!(int_vector, 0x64);
+        assert_vmcb_ctrl_offset!(int_state, 0x68);
+        assert_vmcb_ctrl_offset!(exit_code, 0x70);
+        assert_vmcb_ctrl_offset!(exit_info_1, 0x78);
+        assert_vmcb_ctrl_offset!(exit_info_2, 0x80);
+        assert_vmcb_ctrl_offset!(exit_int_info, 0x88);
+        assert_vmcb_ctrl_offset!(nested_ctl, 0x90);
+        assert_vmcb_ctrl_offset!(avic_vapic_bar, 0x98);
+        assert_vmcb_ctrl_offset!(event_inj, 0xA8);
+        assert_vmcb_ctrl_offset!(event_inj_err, 0xAC);
+        assert_vmcb_ctrl_offset!(nest_cr3, 0xB0);
+        assert_vmcb_ctrl_offset!(lbr_control, 0xB8);
+        assert_vmcb_ctrl_offset!(clean_bits, 0xC0);
+        assert_vmcb_ctrl_offset!(next_rip, 0xC8);
+        assert_vmcb_ctrl_offset!(insn_len, 0xD0);
+        assert_vmcb_ctrl_offset!(insn_bytes, 0xD1);
+        assert_vmcb_ctrl_offset!(avic_backing_page, 0xE0);
+        assert_vmcb_ctrl_offset!(avic_logical_id, 0xF0);
+        assert_vmcb_ctrl_offset!(avic_physical_id, 0xF8);
 
-        assert_eq!(offset_of!(VmcbStateSaveArea, es), 0x00);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cs), 0x10);
-        assert_eq!(offset_of!(VmcbStateSaveArea, ss), 0x20);
-        assert_eq!(offset_of!(VmcbStateSaveArea, ds), 0x30);
-        assert_eq!(offset_of!(VmcbStateSaveArea, fs), 0x40);
-        assert_eq!(offset_of!(VmcbStateSaveArea, gs), 0x50);
-        assert_eq!(offset_of!(VmcbStateSaveArea, gdtr), 0x60);
-        assert_eq!(offset_of!(VmcbStateSaveArea, ldtr), 0x70);
-        assert_eq!(offset_of!(VmcbStateSaveArea, idtr), 0x80);
-        assert_eq!(offset_of!(VmcbStateSaveArea, tr), 0x90);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cpl), 0xCB);
-        assert_eq!(offset_of!(VmcbStateSaveArea, efer), 0xD0);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cr4), 0x148);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cr3), 0x150);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cr0), 0x158);
-        assert_eq!(offset_of!(VmcbStateSaveArea, dr7), 0x160);
-        assert_eq!(offset_of!(VmcbStateSaveArea, dr6), 0x168);
-        assert_eq!(offset_of!(VmcbStateSaveArea, rflags), 0x170);
-        assert_eq!(offset_of!(VmcbStateSaveArea, rip), 0x178);
-        assert_eq!(offset_of!(VmcbStateSaveArea, rsp), 0x1D8);
-        assert_eq!(offset_of!(VmcbStateSaveArea, rax), 0x1F8);
-        assert_eq!(offset_of!(VmcbStateSaveArea, star), 0x200);
-        assert_eq!(offset_of!(VmcbStateSaveArea, lstar), 0x208);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cstar), 0x210);
-        assert_eq!(offset_of!(VmcbStateSaveArea, sfmask), 0x218);
-        assert_eq!(offset_of!(VmcbStateSaveArea, kernel_gs_base), 0x220);
-        assert_eq!(offset_of!(VmcbStateSaveArea, sysenter_cs), 0x228);
-        assert_eq!(offset_of!(VmcbStateSaveArea, sysenter_esp), 0x230);
-        assert_eq!(offset_of!(VmcbStateSaveArea, sysenter_eip), 0x238);
-        assert_eq!(offset_of!(VmcbStateSaveArea, cr2), 0x240);
-        assert_eq!(offset_of!(VmcbStateSaveArea, g_pat), 0x268);
-        assert_eq!(offset_of!(VmcbStateSaveArea, dbgctl), 0x270);
-        assert_eq!(offset_of!(VmcbStateSaveArea, br_from), 0x278);
-        assert_eq!(offset_of!(VmcbStateSaveArea, br_to), 0x280);
-        assert_eq!(offset_of!(VmcbStateSaveArea, last_excp_from), 0x288);
-        assert_eq!(offset_of!(VmcbStateSaveArea, last_excp_to), 0x290);
+        assert_vmcb_save_offset!(es, 0x00);
+        assert_vmcb_save_offset!(cs, 0x10);
+        assert_vmcb_save_offset!(ss, 0x20);
+        assert_vmcb_save_offset!(ds, 0x30);
+        assert_vmcb_save_offset!(fs, 0x40);
+        assert_vmcb_save_offset!(gs, 0x50);
+        assert_vmcb_save_offset!(gdtr, 0x60);
+        assert_vmcb_save_offset!(ldtr, 0x70);
+        assert_vmcb_save_offset!(idtr, 0x80);
+        assert_vmcb_save_offset!(tr, 0x90);
+        assert_vmcb_save_offset!(cpl, 0xCB);
+        assert_vmcb_save_offset!(efer, 0xD0);
+        assert_vmcb_save_offset!(cr4, 0x148);
+        assert_vmcb_save_offset!(cr3, 0x150);
+        assert_vmcb_save_offset!(cr0, 0x158);
+        assert_vmcb_save_offset!(dr7, 0x160);
+        assert_vmcb_save_offset!(dr6, 0x168);
+        assert_vmcb_save_offset!(rflags, 0x170);
+        assert_vmcb_save_offset!(rip, 0x178);
+        assert_vmcb_save_offset!(rsp, 0x1D8);
+        assert_vmcb_save_offset!(s_cet, 0x1E0);
+        assert_vmcb_save_offset!(ssp, 0x1E8);
+        assert_vmcb_save_offset!(isst_addr, 0x1F0);
+        assert_vmcb_save_offset!(rax, 0x1F8);
+        assert_vmcb_save_offset!(star, 0x200);
+        assert_vmcb_save_offset!(lstar, 0x208);
+        assert_vmcb_save_offset!(cstar, 0x210);
+        assert_vmcb_save_offset!(sfmask, 0x218);
+        assert_vmcb_save_offset!(kernel_gs_base, 0x220);
+        assert_vmcb_save_offset!(sysenter_cs, 0x228);
+        assert_vmcb_save_offset!(sysenter_esp, 0x230);
+        assert_vmcb_save_offset!(sysenter_eip, 0x238);
+        assert_vmcb_save_offset!(cr2, 0x240);
+        assert_vmcb_save_offset!(g_pat, 0x268);
+        assert_vmcb_save_offset!(dbgctl, 0x270);
+        assert_vmcb_save_offset!(br_from, 0x278);
+        assert_vmcb_save_offset!(br_to, 0x280);
+        assert_vmcb_save_offset!(last_excp_from, 0x288);
+        assert_vmcb_save_offset!(last_excp_to, 0x290);
     }
 }

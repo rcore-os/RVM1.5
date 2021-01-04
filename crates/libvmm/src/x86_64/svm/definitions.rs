@@ -74,11 +74,11 @@ impl TryFrom<u64> for SvmExitCode {
     type Error = u64;
     fn try_from(val: u64) -> Result<Self, Self::Error> {
         match val as i64 {
-            0x00..=0x0F => Ok(Self::CR_READ(val as _)),
-            0x10..=0x1F => Ok(Self::CR_WRITE(val as _)),
-            0x20..=0x2F => Ok(Self::DR_READ(val as _)),
-            0x30..=0x3F => Ok(Self::DR_WRITE(val as _)),
-            0x40..=0x5F => Ok(Self::EXCP(val as _)),
+            0x00..=0x0F => Ok(Self::CR_READ(val as u8)),
+            0x10..=0x1F => Ok(Self::CR_WRITE(val as u8 - 0x10)),
+            0x20..=0x2F => Ok(Self::DR_READ(val as u8 - 0x20)),
+            0x30..=0x3F => Ok(Self::DR_WRITE(val as u8 - 0x30)),
+            0x40..=0x5F => Ok(Self::EXCP(val as u8 - 0x40)),
             0x60 => Ok(Self::INTR),
             0x61 => Ok(Self::NMI),
             0x62 => Ok(Self::SMI),
@@ -127,7 +127,7 @@ impl TryFrom<u64> for SvmExitCode {
             0x8D => Ok(Self::XSETBV),
             0x8E => Ok(Self::RDPRU),
             0x8F => Ok(Self::EFER_WRITE_TRAP),
-            0x90..=0x9F => Ok(Self::CR_WRITE_TRAP(val as _)),
+            0x90..=0x9F => Ok(Self::CR_WRITE_TRAP(val as u8 - 0x90)),
             0xA0 => Ok(Self::INVLPGB),
             0xA1 => Ok(Self::INVLPGB_ILLEGAL),
             0xA2 => Ok(Self::INVPCID),

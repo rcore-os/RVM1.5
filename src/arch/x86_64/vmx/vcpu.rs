@@ -110,7 +110,7 @@ impl Vcpu {
         Ok(ret)
     }
 
-    pub fn exit(&mut self, linux: &mut LinuxContext) -> HvResult {
+    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
         self.load_vmcs_guest(linux)?;
         Vmcs::clear(self.vmcs_region.paddr())?;
         unsafe { vmx::vmxoff()? };
@@ -118,18 +118,21 @@ impl Vcpu {
         Ok(())
     }
 
-    pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
+    pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
+        let regs = self.regs_mut();
+        regs.rax = 0;
+        regs.rbx = linux.rbx;
+        regs.rbp = linux.rbp;
+        regs.r12 = linux.r12;
+        regs.r13 = linux.r13;
+        regs.r14 = linux.r14;
+        regs.r15 = linux.r15;
         unsafe {
-            asm!("
-                mov rbp, {0}
-                vmlaunch",
-                in(reg) linux.rbp,
-                in("r15") linux.r15,
-                in("r14") linux.r14,
-                in("r13") linux.r13,
-                in("r12") linux.r12,
-                in("rbx") linux.rbx,
-                in("rax") 0,
+            asm!(
+                "mov rsp, {0}",
+                restore_regs_from_stack!(),
+                "vmlaunch",
+                in(reg) &self.guest_regs as * const _ as usize,
             );
         }
         // Never return if successful
@@ -462,32 +465,10 @@ impl Debug for Vcpu {
                 .field("cr0", unsafe { &Cr0Flags::from_bits_unchecked(self.cr(0)) })
                 .field("cr3", &self.cr(3))
                 .field("cr4", unsafe { &Cr4Flags::from_bits_unchecked(self.cr(4)) })
-                .field(
-                    "cs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::CS_SELECTOR.read()?),
-                )
-                .field(
-                    "ds",
-                    &SegmentSelector::from_raw(VmcsField16Guest::DS_SELECTOR.read()?),
-                )
-                .field(
-                    "es",
-                    &SegmentSelector::from_raw(VmcsField16Guest::ES_SELECTOR.read()?),
-                )
-                .field(
-                    "fs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::FS_SELECTOR.read()?),
-                )
+                .field("cs", &VmcsField16Guest::CS_SELECTOR.read()?)
                 .field("fs_base", &VmcsField64Guest::FS_BASE.read()?)
-                .field(
-                    "gs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::GS_SELECTOR.read()?),
-                )
                 .field("gs_base", &VmcsField64Guest::GS_BASE.read()?)
-                .field(
-                    "tss",
-                    &SegmentSelector::from_raw(VmcsField16Guest::TR_SELECTOR.read()?),
-                )
+                .field("tss", &VmcsField16Guest::TR_SELECTOR.read()?)
                 .finish())
         })()
         .unwrap()
@@ -500,10 +481,10 @@ impl Debug for Vcpu {
 unsafe extern "sysv64" fn vmx_exit() -> ! {
     asm!(
         save_regs_to_stack!(),
-        "mov r15, rsp",         // save temporary rsp to r15
+        "mov r15, rsp",         // save temporary RSP to r15
         "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
         "call {1}",             // call vmexit_handler
-        "mov rsp, r15",         // load temporary rsp from r15
+        "mov rsp, r15",         // load temporary RSP from r15
         restore_regs_from_stack!(),
         "vmresume",
         const core::mem::size_of::<GuestRegisters>(),

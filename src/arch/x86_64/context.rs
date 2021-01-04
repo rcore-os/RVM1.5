@@ -46,7 +46,7 @@ pub struct GuestRegisters {
     pub rcx: u64,
     pub rdx: u64,
     pub rbx: u64,
-    pub unused_rsp: u64,
+    _unused_rsp: u64,
     pub rbp: u64,
     pub rsi: u64,
     pub rdi: u64,
