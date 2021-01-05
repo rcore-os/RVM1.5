@@ -162,12 +162,12 @@ impl LinuxContext {
             Msr::IA32_EFER.write(self.efer);
 
             Cr0::write(self.cr0);
+            Cr4::write(self.cr4);
             // cr3 must be last in case cr4 enables PCID
             Cr3::write(
                 PhysFrame::containing_address(PhysAddr::new(self.cr3)),
                 Cr3Flags::empty(), // clear PCID
             );
-            Cr4::write(self.cr4); // FIXME
 
             // Copy Linux TSS descriptor into our GDT, clearing the busy flag,
             // then reload TR from it. We can't use Linux' GDT as it is r/o.

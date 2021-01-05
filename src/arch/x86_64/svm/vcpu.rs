@@ -205,6 +205,7 @@ impl Vcpu {
         linux.cr0 = Cr0Flags::from_bits_truncate(vmcb.cr0);
         linux.cr3 = vmcb.cr3;
         linux.cr4 = Cr4Flags::from_bits_truncate(vmcb.cr4);
+        linux.efer = vmcb.efer & !EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits();
 
         linux.cs.selector = SegmentSelector::from_raw(vmcb.cs.selector);
         linux.ds.selector = SegmentSelector::from_raw(vmcb.ds.selector);
@@ -214,8 +215,6 @@ impl Vcpu {
         linux.gdt.limit = vmcb.gdtr.limit as _;
         linux.idt.base = vmcb.idtr.base;
         linux.idt.limit = vmcb.idtr.limit as _;
-
-        linux.efer = vmcb.efer & !EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits();
 
         // We should load the following register state manuly since we not use VMLOAD/VMSAVE
         linux.fs.selector = segmentation::fs();

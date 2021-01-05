@@ -46,42 +46,46 @@ impl From<PTF> for MemFlags {
     }
 }
 
-impl GenericPTE for PTE {
+#[repr(transparent)]
+#[derive(Clone, Debug)]
+pub struct PTEntry(PTE);
+
+impl GenericPTE for PTEntry {
     fn addr(&self) -> PhysAddr {
-        PTE::addr(self).as_u64() as _
+        self.0.addr().as_u64() as _
     }
     fn flags(&self) -> MemFlags {
-        PTE::flags(self).into()
+        self.0.flags().into()
     }
     fn is_unused(&self) -> bool {
-        PTE::is_unused(self)
+        self.0.is_unused()
     }
     fn is_present(&self) -> bool {
-        self.flags().contains(PTF::PRESENT)
+        self.0.flags().contains(PTF::PRESENT)
     }
     fn is_huge(&self) -> bool {
-        self.flags().contains(PTF::HUGE_PAGE)
+        self.0.flags().contains(PTF::HUGE_PAGE)
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        PTE::set_addr(self, X86PhysAddr::new(paddr as _), self.flags())
+        self.0
+            .set_addr(X86PhysAddr::new(paddr as _), self.0.flags())
     }
     fn set_flags(&mut self, flags: MemFlags, is_huge: bool) {
-        let mut flags: PTF = flags.into();
+        let mut flags = flags.into();
         if is_huge {
             flags |= PTF::HUGE_PAGE;
         }
-        PTE::set_flags(self, flags | PTF::USER_ACCESSIBLE) // FIXME: hack for SVM NPT
+        self.0.set_flags(flags)
     }
     fn set_table(&mut self, paddr: PhysAddr) {
-        PTE::set_addr(
-            self,
+        self.0.set_addr(
             X86PhysAddr::new(paddr as _),
             PTF::PRESENT | PTF::WRITABLE | PTF::USER_ACCESSIBLE,
         )
     }
     fn clear(&mut self) {
-        self.set_unused()
+        self.0.set_unused()
     }
 }
 
@@ -104,4 +108,4 @@ impl PagingInstr for X86PagingInstr {
     }
 }
 
-pub type PageTable = Level4PageTable<VirtAddr, PTE, X86PagingInstr>;
+pub type PageTable = Level4PageTable<VirtAddr, PTEntry, X86PagingInstr>;
