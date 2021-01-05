@@ -30,6 +30,8 @@ pub trait VcpuAccessGuestState {
 
     // Methods only available for x86 cpus:
     fn rflags(&self) -> u64;
+    fn fs_base(&self) -> u64;
+    fn gs_base(&self) -> u64;
     fn cr(&self, cr_idx: usize) -> u64;
     fn set_cr(&mut self, cr_idx: usize, val: u64);
 }

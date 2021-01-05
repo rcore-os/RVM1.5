@@ -7,10 +7,8 @@ impl VmExit<'_> {
     pub fn handle_nested_page_fault(&mut self, exit_info: &VmExitInfo) -> HvResult {
         let guest_paddr = exit_info.exit_info_2;
         warn!(
-            "#VMEXIT(NPF) @ {:#x} RIP({:#x}, {})",
-            guest_paddr,
-            exit_info.guest_rip,
-            exit_info.guest_rip - exit_info.guest_rip,
+            "#VMEXIT(NPF) @ {:#x} RIP({:#x}, {:#x})",
+            guest_paddr, exit_info.guest_rip, exit_info.guest_next_rip,
         );
         hv_result_err!(ENOSYS)
     }

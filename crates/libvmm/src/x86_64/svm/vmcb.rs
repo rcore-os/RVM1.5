@@ -129,7 +129,7 @@ pub struct VmExitInfo {
     pub exit_info_1: u64,
     pub exit_info_2: u64,
     pub guest_rip: u64,
-    pub next_rip: u64,
+    pub guest_next_rip: u64,
 }
 
 impl VmExitInfo {
@@ -140,7 +140,7 @@ impl VmExitInfo {
             exit_info_1: vmcb.control.exit_info_1,
             exit_info_2: vmcb.control.exit_info_2,
             guest_rip: vmcb.save.rip,
-            next_rip: vmcb.control.next_rip,
+            guest_next_rip: vmcb.control.next_rip,
         }
     }
 }

@@ -397,6 +397,14 @@ impl VcpuAccessGuestState for Vcpu {
         VmcsField64Guest::RFLAGS.read().unwrap()
     }
 
+    fn fs_base(&self) -> u64 {
+        VmcsField64Guest::FS_BASE.read().unwrap()
+    }
+
+    fn gs_base(&self) -> u64 {
+        VmcsField64Guest::GS_BASE.read().unwrap()
+    }
+
     fn cr(&self, cr_idx: usize) -> u64 {
         (|| -> HvResult<u64> {
             Ok(match cr_idx {

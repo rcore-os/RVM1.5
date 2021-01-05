@@ -184,7 +184,7 @@ impl Vcpu {
         vmcb.guest_asid = 1; // No more than one guest owns the CPU
         vmcb.clean_bits = 0; // Explicitly mark all of the state as new
         vmcb.nest_cr3 = cell.gpm.read().page_table().root_paddr() as _;
-        vmcb.tlb_control = 1;
+        vmcb.tlb_control = 3; // TODO
 
         self.vmcb.set_intercept(SvmIntercept::NMI);
         self.vmcb.set_intercept(SvmIntercept::CPUID);
@@ -216,7 +216,7 @@ impl Vcpu {
         linux.idt.base = vmcb.idtr.base;
         linux.idt.limit = vmcb.idtr.limit as _;
 
-        // We should load the following register state manuly since we not use VMLOAD/VMSAVE
+        // We should load the following register state manually since we not use VMLOAD/VMSAVE
         linux.fs.selector = segmentation::fs();
         linux.gs.selector = segmentation::gs();
         linux.tss.selector = task::tr();
@@ -248,6 +248,14 @@ impl VcpuAccessGuestState for Vcpu {
 
     fn rflags(&self) -> u64 {
         self.vmcb.save.rflags
+    }
+
+    fn fs_base(&self) -> u64 {
+        Msr::IA32_FS_BASE.read()
+    }
+
+    fn gs_base(&self) -> u64 {
+        Msr::IA32_FS_BASE.read()
     }
 
     fn cr(&self, cr_idx: usize) -> u64 {
