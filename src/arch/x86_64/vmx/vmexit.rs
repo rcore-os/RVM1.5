@@ -1,4 +1,4 @@
-use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptionInfo, VmExitInfo};
+use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptInfo, VmExitInfo};
 use libvmm::vmx::VmxExitReason;
 
 use crate::arch::exception::ExceptionType;
@@ -7,7 +7,7 @@ use crate::error::HvResult;
 
 impl VmExit<'_> {
     fn handle_exception_nmi(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let intr_info = ExitInterruptionInfo::new()?;
+        let intr_info = ExitInterruptInfo::new()?;
         info!(
             "VM exit: Exception or NMI @ RIP({:#x}, {}): {:#x?}",
             exit_info.guest_rip, exit_info.exit_instruction_length, intr_info

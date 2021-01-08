@@ -1,7 +1,7 @@
 use x86::bits64::rflags::{self, RFlags};
 use x86::vmx::{Result, VmFail};
 
-use super::{InvEptDescriptor, InvEptType};
+use super::flags::{InvEptDescriptor, InvEptType};
 
 pub use x86::bits64::vmx::{vmxoff, vmxon};
 

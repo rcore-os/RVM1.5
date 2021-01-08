@@ -284,7 +284,7 @@ impl FeatureControl {
 
 bitflags! {
     /// This field provides details about the event to be injected.
-    pub struct InterruptionInfo: u32 {
+    pub struct InterruptInfo: u32 {
         /// Deliver error code
         const ERROR_CODE    = 1 << 11;
         /// Valid
@@ -295,7 +295,7 @@ bitflags! {
 /// The interruption type (bits 10:8) determines details of how the injection is performed.
 #[repr(u32)]
 #[derive(Debug)]
-pub enum InterruptionType {
+pub enum InterruptType {
     /// External interrupt
     External = 0,
     /// Reserved
@@ -314,7 +314,7 @@ pub enum InterruptionType {
     Other = 7,
 }
 
-impl InterruptionType {
+impl InterruptType {
     pub fn from_vector(vector: u8) -> Self {
         use x86::irq::*;
         match vector {
@@ -337,7 +337,7 @@ impl InterruptionType {
     }
 }
 
-impl InterruptionInfo {
+impl InterruptInfo {
     fn has_error_code(vector: u8) -> bool {
         use x86::irq::*;
         matches!(
@@ -354,7 +354,7 @@ impl InterruptionInfo {
 
     pub fn from_vector(vector: u8) -> Self {
         let mut bits = vector as u32;
-        bits.set_bits(8..11, InterruptionType::from_vector(vector) as u32);
+        bits.set_bits(8..11, InterruptType::from_vector(vector) as u32);
         let mut info = unsafe { Self::from_bits_unchecked(bits) } | Self::VALID;
         if Self::has_error_code(vector) {
             info |= Self::ERROR_CODE;
@@ -362,7 +362,34 @@ impl InterruptionInfo {
         info
     }
 
-    pub fn intr_type(&self) -> InterruptionType {
+    pub fn intr_type(&self) -> InterruptType {
         unsafe { core::mem::transmute(self.bits().get_bits(8..11) & 0x7) }
     }
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct InvEptDescriptor {
+    /// EPT pointer (EPTP)
+    eptp: u64,
+    /// Reserved (must be zero)
+    _reserved: u64,
+}
+
+impl InvEptDescriptor {
+    pub fn new(eptp: u64) -> Self {
+        Self { eptp, _reserved: 0 }
+    }
+}
+
+#[repr(u64)]
+#[derive(Debug)]
+pub enum InvEptType {
+    /// The logical processor invalidates all mappings associated with bits
+    /// 51:12 of the EPT pointer (EPTP) specified in the INVEPT descriptor.
+    /// It may invalidate other mappings as well.
+    SingleContext = 1,
+
+    /// The logical processor invalidates mappings associated with all EPTPs.
+    Global = 2,
 }

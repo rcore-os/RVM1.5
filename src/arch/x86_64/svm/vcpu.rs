@@ -1,6 +1,7 @@
 use core::fmt::{Debug, Formatter, Result};
 
 use libvmm::msr::Msr;
+use libvmm::svm::flags::{InterruptType, VmcbCleanBits, VmcbIntInfo, VmcbTlbControl};
 use libvmm::svm::{vmcb::VmcbSegment, SvmExitCode, SvmIntercept, Vmcb};
 use x86::{segmentation, segmentation::SegmentSelector, task};
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
@@ -105,7 +106,15 @@ impl Vcpu {
     }
 
     pub fn inject_fault(&mut self) -> HvResult {
-        todo!()
+        self.vmcb.inject_event(
+            VmcbIntInfo::from(
+                InterruptType::Exception,
+                crate::arch::exception::ExceptionType::GeneralProtectionFault,
+                false,
+            ),
+            0,
+        );
+        Ok(())
     }
 
     pub fn advance_rip(&mut self, instr_len: u8) -> HvResult {
@@ -182,13 +191,12 @@ impl Vcpu {
         vmcb.intercept_exceptions = 0;
         vmcb.np_enable = 1;
         vmcb.guest_asid = 1; // No more than one guest owns the CPU
-        vmcb.clean_bits = 0; // Explicitly mark all of the state as new
+        vmcb.clean_bits = VmcbCleanBits::empty(); // Explicitly mark all of the state as new
         vmcb.nest_cr3 = cell.gpm.read().page_table().root_paddr() as _;
-        vmcb.tlb_control = 3; // TODO
+        vmcb.tlb_control = VmcbTlbControl::FlushAsid as _;
 
         self.vmcb.set_intercept(SvmIntercept::NMI);
         self.vmcb.set_intercept(SvmIntercept::CPUID);
-        self.vmcb.set_intercept(SvmIntercept::SHUTDOWN);
         self.vmcb.set_intercept(SvmIntercept::VMRUN);
         self.vmcb.set_intercept(SvmIntercept::VMMCALL);
         self.vmcb.set_intercept(SvmIntercept::VMLOAD);

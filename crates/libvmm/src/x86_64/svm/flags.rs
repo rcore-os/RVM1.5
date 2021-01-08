@@ -1,3 +1,4 @@
+use bit_field::BitField;
 use bitflags::bitflags;
 
 use crate::x86_64::msr::{Msr, MsrReadWrite};
@@ -39,4 +40,89 @@ impl VmCr {
     pub fn read() -> VmCrFlags {
         VmCrFlags::from_bits_truncate(Self::read_raw())
     }
+}
+
+bitflags! {
+    /// The VMCB Clean field (VMCB offset 0C0h, bits 31:0) controls which guest
+    /// register values are loaded from the VMCB state cache on VMRUN.
+   pub struct VmcbCleanBits: u32 {
+       /// Intercepts: all the intercept vectors, TSC offset, Pause Filter Count
+       const I          = 1 << 0;
+       /// IOMSRPM: IOPM_BASE, MSRPM_BASE
+       const IOPM       = 1 << 1;
+       /// ASID
+       const ASID       = 1 << 2;
+       /// V_TPR, V_IRQ, V_INTR_PRIO, V_IGN_TPR, V_INTR_MASKING, V_INTR_VECTOR
+       /// (Offset 60h–67h)
+       const TPR        = 1 << 3;
+       /// Nested Paging: NCR3, G_PAT
+       const NP         = 1 << 4;
+       /// CR0, CR3, CR4, EFER
+       const CR_X        = 1 << 5;
+       /// DR6, DR7
+       const DR_X        = 1 << 6;
+       /// GDT/IDT Limit and Base
+       const DT         = 1 << 7;
+       /// CS/DS/SS/ES Sel/Base/Limit/Attr, CPL
+       const SEG        = 1 << 8;
+       /// CR2
+       const CR2        = 1 << 9;
+       /// DbgCtlMsr, br_from/to, lastint_from/to
+       const LBR        = 1 << 10;
+       /// AVIC APIC_BAR; AVIC APIC_BACKING_PAGE, AVIC PHYSICAL_TABLE and AVIC
+       /// LOGICAL_TABLE Pointers
+       const AVIC       = 1 << 11;
+       /// S_CET, SSP, ISST_ADDR
+       const CET        = 1 << 12;
+       /// The hypervisor has not modified the VMCB.
+       const UNMODIFIED = 0xffff_ffff;
+   }
+}
+
+bitflags! {
+    /// EXITINTINFO/EVENTINJ field in the VMCB.
+    pub struct VmcbIntInfo: u32 {
+        /// Error Code Valid
+        const ERROR_CODE    = 1 << 11;
+        /// Valid
+        const VALID         = 1 << 31;
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug)]
+pub enum InterruptType {
+    /// External or virtual interrupt (INTR)
+    External = 0,
+    /// Non-maskable interrupt (NMI)
+    NMI = 2,
+    /// Exception (fault or trap)
+    Exception = 3,
+    /// Software interrupt (caused by INTn instruction)
+    SoftIntr = 4,
+}
+
+impl VmcbIntInfo {
+    pub fn from(int_type: InterruptType, vector: u8, has_error_code: bool) -> Self {
+        let mut bits = vector as u32;
+        bits.set_bits(8..11, int_type as u32);
+        let mut info = unsafe { Self::from_bits_unchecked(bits) } | Self::VALID;
+        if has_error_code {
+            info |= Self::ERROR_CODE;
+        }
+        info
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug)]
+pub enum VmcbTlbControl {
+    /// Do not flush
+    DoNotFlush = 0,
+    /// Flush entire TLB (Should be used only on legacy hardware.)
+    FlushAll = 0x01,
+    /// Flush this guest's TLB entries
+    FlushAsid = 0x03,
+    /// Flush this guest's non-global TLB entries
+    FlushAsidNonGlobal = 0x07,
 }

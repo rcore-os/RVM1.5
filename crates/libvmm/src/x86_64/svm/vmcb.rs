@@ -1,6 +1,7 @@
 use core::fmt::{Debug, Formatter, Result};
 use core::mem::MaybeUninit;
 
+use super::flags::{VmcbCleanBits, VmcbIntInfo};
 use super::{SvmExitCode, SvmIntercept};
 
 #[repr(C, align(1024))]
@@ -27,7 +28,8 @@ pub struct VmcbControlArea {
     pub exit_code: u64,
     pub exit_info_1: u64,
     pub exit_info_2: u64,
-    pub exit_int_info: u64,
+    pub exit_int_info: u32,
+    pub exit_int_info_err: u32,
     pub np_enable: u8,
     _reserved4: [u8; 3],
     pub avic_vapic_bar: u64,
@@ -36,7 +38,7 @@ pub struct VmcbControlArea {
     pub event_inj_err: u32,
     pub nest_cr3: u64,
     pub lbr_control: u64,
-    pub clean_bits: u32,
+    pub clean_bits: VmcbCleanBits,
     _reserved6: u32,
     pub next_rip: u64,
     pub insn_len: u8,
@@ -121,6 +123,11 @@ impl Vmcb {
             _ => {}
         }
     }
+
+    pub fn inject_event(&mut self, info: VmcbIntInfo, error_code: u32) {
+        self.control.event_inj = info.bits();// | 0x700;
+        self.control.event_inj_err = error_code;
+    }
 }
 
 #[derive(Debug)]
@@ -174,6 +181,7 @@ impl Debug for VmcbControlArea {
             .field("exit_info_1", &self.exit_info_1)
             .field("exit_info_2", &self.exit_info_2)
             .field("exit_int_info", &self.exit_int_info)
+            .field("exit_int_info_err", &self.exit_int_info_err)
             .field("np_enable", &self.np_enable)
             .field("avic_vapic_bar", &self.avic_vapic_bar)
             .field("event_inj", &self.event_inj)
@@ -241,15 +249,16 @@ impl Debug for VmcbStateSaveArea {
 mod tests {
     use super::*;
     use core::mem::size_of;
+    use memoffset::offset_of;
 
     macro_rules! assert_vmcb_ctrl_offset {
-        ($field: ident, &offset: expr) => {
+        ($field: ident, $offset: expr) => {
             assert_eq!(offset_of!(VmcbControlArea, $field), $offset)
         };
     }
 
     macro_rules! assert_vmcb_save_offset {
-        ($field: ident, &offset: expr) => {
+        ($field: ident, $offset: expr) => {
             assert_eq!(offset_of!(VmcbStateSaveArea, $field), $offset)
         };
     }
@@ -285,6 +294,7 @@ mod tests {
         assert_vmcb_ctrl_offset!(exit_info_1, 0x78);
         assert_vmcb_ctrl_offset!(exit_info_2, 0x80);
         assert_vmcb_ctrl_offset!(exit_int_info, 0x88);
+        assert_vmcb_ctrl_offset!(exit_int_info_err, 0x8C);
         assert_vmcb_ctrl_offset!(np_enable, 0x90);
         assert_vmcb_ctrl_offset!(avic_vapic_bar, 0x98);
         assert_vmcb_ctrl_offset!(event_inj, 0xA8);
