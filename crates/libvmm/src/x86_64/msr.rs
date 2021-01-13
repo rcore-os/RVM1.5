@@ -46,6 +46,13 @@ pub enum Msr {
     VM_CR = 0xc001_0114,
     IGNNE = 0xc001_0115,
     VM_HSAVE_PA = 0xc001_0117,
+
+    PERF_EVT_SEL0 = 0xc001_0200,
+    PERF_EVT_SEL1 = 0xc001_0202,
+    PERF_EVT_SEL2 = 0xc001_0204,
+    PERF_EVT_SEL3 = 0xc001_0206,
+    PERF_EVT_SEL4 = 0xc001_0208,
+    PERF_EVT_SEL5 = 0xc001_020a,
 }
 
 impl Msr {

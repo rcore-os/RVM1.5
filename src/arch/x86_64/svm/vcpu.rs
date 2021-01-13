@@ -33,6 +33,18 @@ impl Vcpu {
     pub fn new(linux: &LinuxContext, cell: &Cell) -> HvResult<Self> {
         super::check_hypervisor_feature()?;
 
+        // make sure all perf counters are off
+        unsafe {
+            /// Core Performance Event-Select Register (PerfEvtSeln), Counter Enable (bit 22)
+            const PERF_EVT_SEL_EN: u64 = 1 << 22;
+            Msr::PERF_EVT_SEL0.write(Msr::PERF_EVT_SEL0.read() & !PERF_EVT_SEL_EN);
+            Msr::PERF_EVT_SEL1.write(Msr::PERF_EVT_SEL1.read() & !PERF_EVT_SEL_EN);
+            Msr::PERF_EVT_SEL2.write(Msr::PERF_EVT_SEL2.read() & !PERF_EVT_SEL_EN);
+            Msr::PERF_EVT_SEL3.write(Msr::PERF_EVT_SEL3.read() & !PERF_EVT_SEL_EN);
+            Msr::PERF_EVT_SEL4.write(Msr::PERF_EVT_SEL4.read() & !PERF_EVT_SEL_EN);
+            Msr::PERF_EVT_SEL5.write(Msr::PERF_EVT_SEL5.read() & !PERF_EVT_SEL_EN);
+        }
+
         // TODO: check linux CR0, CR4
 
         let efer = Efer::read();
