@@ -1,4 +1,5 @@
-use libvmm::svm::{flags::VmcbCleanBits, SvmExitCode, VmExitInfo};
+use libvmm::svm::flags::VmcbCleanBits;
+use libvmm::svm::{SvmExitCode, VmExitInfo};
 
 use crate::arch::vmm::{VcpuAccessGuestState, VmExit};
 use crate::error::HvResult;
@@ -6,6 +7,12 @@ use crate::error::HvResult;
 impl VmExit<'_> {
     fn handle_nmi(&mut self) -> HvResult {
         unsafe { asm!("stgi; clgi") };
+        Ok(())
+    }
+
+    fn handle_exception(&mut self, vec: u8, exit_info: &VmExitInfo) -> HvResult {
+        info!("#VMEXIT(EXCP {}) @ RIP({:#x})", vec, exit_info.guest_rip);
+        warn!("Unhandled Guest Exception: #{:#x}", vec);
         Ok(())
     }
 
@@ -37,6 +44,7 @@ impl VmExit<'_> {
 
         let res = match exit_code {
             SvmExitCode::INVALID => panic!("VM entry failed: {:#x?}\n{:#x?}", exit_info, vcpu.vmcb),
+            SvmExitCode::EXCP(vec) => self.handle_exception(vec, &exit_info),
             SvmExitCode::NMI => self.handle_nmi(),
             SvmExitCode::CPUID => self.handle_cpuid(),
             SvmExitCode::VMMCALL => self.handle_hypercall(),
@@ -46,6 +54,11 @@ impl VmExit<'_> {
                 1 => self.handle_msr_write(),
                 _ => hv_result_err!(EIO),
             },
+            SvmExitCode::SHUTDOWN => {
+                error!("#VMEXIT(SHUTDOWN): {:#x?}", exit_info);
+                self.cpu_data.vcpu.inject_fault()?;
+                Ok(())
+            }
             _ => hv_result_err!(ENOSYS),
         };
 

@@ -148,10 +148,7 @@ impl Vcpu {
     }
 
     pub fn inject_fault(&mut self) -> HvResult {
-        Vmcs::inject_interrupt(
-            crate::arch::exception::ExceptionType::GeneralProtectionFault,
-            Some(0),
-        )?;
+        Vmcs::inject_interrupt(crate::arch::ExceptionType::GeneralProtectionFault, Some(0))?;
         Ok(())
     }
 

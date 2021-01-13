@@ -121,7 +121,7 @@ impl Vcpu {
         self.vmcb.inject_event(
             VmcbIntInfo::from(
                 InterruptType::Exception,
-                crate::arch::exception::ExceptionType::GeneralProtectionFault,
+                crate::arch::ExceptionType::GeneralProtectionFault,
                 false,
             ),
             0,
@@ -209,6 +209,7 @@ impl Vcpu {
 
         self.vmcb.set_intercept(SvmIntercept::NMI);
         self.vmcb.set_intercept(SvmIntercept::CPUID);
+        self.vmcb.set_intercept(SvmIntercept::SHUTDOWN);
         self.vmcb.set_intercept(SvmIntercept::VMRUN);
         self.vmcb.set_intercept(SvmIntercept::VMMCALL);
         self.vmcb.set_intercept(SvmIntercept::VMLOAD);
