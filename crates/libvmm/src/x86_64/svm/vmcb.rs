@@ -125,7 +125,7 @@ impl Vmcb {
     }
 
     pub fn inject_event(&mut self, info: VmcbIntInfo, error_code: u32) {
-        self.control.event_inj = info.bits();// | 0x700;
+        self.control.event_inj = info.bits();
         self.control.event_inj_err = error_code;
     }
 }

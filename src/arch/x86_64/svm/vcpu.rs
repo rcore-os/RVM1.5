@@ -122,7 +122,6 @@ impl Vcpu {
             VmcbIntInfo::from(
                 InterruptType::Exception,
                 crate::arch::ExceptionType::GeneralProtectionFault,
-                false,
             ),
             0,
         );

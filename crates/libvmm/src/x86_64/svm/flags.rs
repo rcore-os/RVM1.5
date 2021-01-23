@@ -103,11 +103,25 @@ pub enum InterruptType {
 }
 
 impl VmcbIntInfo {
-    pub fn from(int_type: InterruptType, vector: u8, has_error_code: bool) -> Self {
+    fn has_error_code(vector: u8) -> bool {
+        use x86::irq::*;
+        matches!(
+            vector,
+            DOUBLE_FAULT_VECTOR
+                | INVALID_TSS_VECTOR
+                | SEGMENT_NOT_PRESENT_VECTOR
+                | STACK_SEGEMENT_FAULT_VECTOR
+                | GENERAL_PROTECTION_FAULT_VECTOR
+                | PAGE_FAULT_VECTOR
+                | ALIGNMENT_CHECK_VECTOR
+        )
+    }
+
+    pub fn from(int_type: InterruptType, vector: u8) -> Self {
         let mut bits = vector as u32;
         bits.set_bits(8..11, int_type as u32);
         let mut info = unsafe { Self::from_bits_unchecked(bits) } | Self::VALID;
-        if has_error_code {
+        if Self::has_error_code(vector) {
             info |= Self::ERROR_CODE;
         }
         info

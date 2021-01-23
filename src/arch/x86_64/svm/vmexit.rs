@@ -11,7 +11,10 @@ impl VmExit<'_> {
     }
 
     fn handle_exception(&mut self, vec: u8, exit_info: &VmExitInfo) -> HvResult {
-        info!("#VMEXIT(EXCP {}) @ RIP({:#x})", vec, exit_info.guest_rip);
+        info!(
+            "#VMEXIT(EXCP {}) @ RIP({:#x}): {:#x?}",
+            vec, exit_info.guest_rip, exit_info
+        );
         warn!("Unhandled Guest Exception: #{:#x}", vec);
         Ok(())
     }
