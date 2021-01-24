@@ -3,6 +3,6 @@ pub mod flags;
 mod instructions;
 pub mod vmcs;
 
-pub use definitions::{InvEptDescriptor, InvEptType, VmxExitReason, VmxInstructionError};
+pub use definitions::{VmxExitReason, VmxInstructionError};
 pub use instructions::{invept, vmxoff, vmxon};
 pub use vmcs::Vmcs;

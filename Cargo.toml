@@ -1,11 +1,15 @@
 [package]
-name = "rvm1-5"
+name = "rvm15"
 version = "1.0.0"
 authors = ["Yuekai Jia <equation618@gmail.com>"]
 edition = "2018"
 description = "A Type-1.5 hypervisor written in Rust."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+vmx = ["libvmm/vmx"]
+svm = ["libvmm/svm"]
 
 [dependencies]
 log = "0.4"
@@ -14,7 +18,7 @@ bitflags = "1.2"
 bit_field = "0.10"
 numeric-enum-macro = "0.2"
 buddy_system_allocator = "0.5"
-libvmm = { path = "./crates/libvmm" }
+libvmm = { path = "./crates/libvmm", default-features = false }
 uart_16550 = { path = "./crates/uart_16550" }
 lazy_static = { version = "1.4", features = ["spin_no_std"] }
 bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator", rev = "03bd9909" }

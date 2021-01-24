@@ -4,8 +4,8 @@ use bit_field::BitField;
 use libvmm_macros::*;
 use x86::{bits64::vmx, vmx::Result as VmResult};
 
-use super::definitions::{InvEptType, VmxExitReason, VmxInstructionError};
-use super::flags::{EPTPointer, InterruptionInfo};
+use super::definitions::{VmxExitReason, VmxInstructionError};
+use super::flags::{EPTPointer, InterruptInfo, InvEptType};
 
 /// B.1.1 16-Bit Control Fields
 #[vmcs_access(16, "RW")]
@@ -275,8 +275,8 @@ impl Vmcs {
     }
 
     pub fn inject_interrupt(vector: u8, error_code: Option<u32>) -> VmResult<()> {
-        let info = InterruptionInfo::from_vector(vector);
-        if info.contains(InterruptionInfo::ERROR_CODE) {
+        let info = InterruptInfo::from_vector(vector);
+        if info.contains(InterruptInfo::ERROR_CODE) {
             let error_code =
                 error_code.unwrap_or(VmcsField32ReadOnly::VM_EXIT_INTR_ERROR_CODE.read()?);
             VmcsField32Control::VM_ENTRY_EXCEPTION_ERROR_CODE.write(error_code)?;
@@ -324,13 +324,13 @@ impl VmExitInfo {
 }
 
 #[derive(Debug)]
-pub struct ExitInterruptionInfo {
+pub struct ExitInterruptInfo {
     pub vector: u8,
     pub interruption_type: u8,
     pub valid: bool,
 }
 
-impl ExitInterruptionInfo {
+impl ExitInterruptInfo {
     pub fn new() -> VmResult<Self> {
         let info = VmcsField32ReadOnly::VM_EXIT_INTR_INFO.read()?;
         Ok(Self {

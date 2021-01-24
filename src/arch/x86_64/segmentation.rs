@@ -48,6 +48,7 @@ bitflags! {
 }
 
 impl SegmentAccessRights {
+    #[allow(dead_code)]
     pub fn dpl(&self) -> u8 {
         self.bits().get_bits(5..=6) as _
     }
@@ -63,6 +64,12 @@ impl SegmentAccessRights {
     pub fn set_descriptor_type(desc: &mut u64, type_field: Self) {
         desc.set_bits(40..44, type_field.bits() as u64);
     }
+
+    #[cfg(feature = "svm")]
+    pub fn as_svm_segment_attributes(&self) -> u16 {
+        let bits = self.bits() as u16;
+        (bits & 0xff) | ((bits & 0xf000) >> 4)
+    }
 }
 
 #[derive(Debug)]
@@ -74,7 +81,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn invalid() -> Self {
+    pub const fn invalid() -> Self {
         Self {
             selector: SegmentSelector::empty(),
             base: 0,

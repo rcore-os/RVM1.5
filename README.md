@@ -6,7 +6,7 @@ A Type-1.5 hypervisor written in Rust.
 
 Drived by the driver from [Jailhouse](https://github.com/siemens/jailhouse).
 
-Supported architecture: x86_64 (Intel VMX).
+Supported architectures: x86_64 (Intel VMX, AMD SVM).
 
 [![Enable and disable hypervisor in RVM1.5](demo/enable-disable-hypervisor.gif)](https://asciinema.org/a/381240?autoplay=1)
 
@@ -15,7 +15,7 @@ Supported architecture: x86_64 (Intel VMX).
 ### Build
 
 ```
-make [LOG=warn|info|debug|trace]
+make [VENDOR=intel|amd] [LOG=warn|info|debug|trace]
 ```
 
 TODO...

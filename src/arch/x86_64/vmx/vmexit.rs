@@ -1,13 +1,13 @@
-use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptionInfo, VmExitInfo};
+use libvmm::vmx::vmcs::{EptViolationInfo, ExitInterruptInfo, VmExitInfo};
 use libvmm::vmx::VmxExitReason;
 
-use crate::arch::exception::ExceptionType;
-use crate::arch::vmm::{VcpuAccessGuestState, VmExit, VM_EXIT_LEN_RDMSR, VM_EXIT_LEN_WRMSR};
+use crate::arch::vmm::VmExit;
+use crate::arch::ExceptionType;
 use crate::error::HvResult;
 
 impl VmExit<'_> {
     fn handle_exception_nmi(&mut self, exit_info: &VmExitInfo) -> HvResult {
-        let intr_info = ExitInterruptionInfo::new()?;
+        let intr_info = ExitInterruptInfo::new()?;
         info!(
             "VM exit: Exception or NMI @ RIP({:#x}, {}): {:#x?}",
             exit_info.guest_rip, exit_info.exit_instruction_length, intr_info
@@ -18,27 +18,6 @@ impl VmExit<'_> {
             },
             v => warn!("Unhandled Guest Exception: #{:#x}", v),
         }
-        Ok(())
-    }
-
-    fn handle_msr_read(&mut self) -> HvResult {
-        let guest_regs = self.cpu_data.vcpu.regs_mut();
-        let id = guest_regs.rcx;
-        warn!("VM exit: RDMSR({:#x})", id);
-        // TODO
-        guest_regs.rax = 0;
-        guest_regs.rdx = 0;
-        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_RDMSR)?;
-        Ok(())
-    }
-
-    fn handle_msr_write(&mut self) -> HvResult {
-        let guest_regs = self.cpu_data.vcpu.regs();
-        let id = guest_regs.rcx;
-        let value = guest_regs.rax | (guest_regs.rdx << 32);
-        warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);
-        // TODO
-        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_WRMSR)?;
         Ok(())
     }
 
@@ -59,8 +38,7 @@ impl VmExit<'_> {
         trace!("VM exit: {:#x?}", exit_info);
 
         if exit_info.entry_failure {
-            error!("VM entry failed: {:#x?}", exit_info);
-            return hv_result_err!(EIO);
+            panic!("VM entry failed: {:#x?}", exit_info);
         }
         // self.test_read_guest_memory(
         //     exit_info.guest_rip as _,
@@ -74,7 +52,11 @@ impl VmExit<'_> {
             VmxExitReason::MSR_READ => self.handle_msr_read(),
             VmxExitReason::MSR_WRITE => self.handle_msr_write(),
             VmxExitReason::EPT_VIOLATION => self.handle_ept_violation(&exit_info),
-            VmxExitReason::TRIPLE_FAULT => panic!("Triple fault!"),
+            VmxExitReason::TRIPLE_FAULT => {
+                error!("Triple fault: {:#x?}", exit_info);
+                self.cpu_data.vcpu.inject_fault()?;
+                Ok(())
+            }
             _ => hv_result_err!(ENOSYS),
         };
 

@@ -1,7 +1,12 @@
+#[cfg(feature = "vmx")]
 #[path = "vmx/mod.rs"]
 mod vendor;
 
-use x86_64::registers::control::Cr4Flags;
+#[cfg(feature = "svm")]
+#[path = "svm/mod.rs"]
+mod vendor;
+
+use x86_64::registers::control::{Cr0Flags, Cr4Flags};
 
 use super::GuestRegisters;
 use crate::error::HvResult;
@@ -11,7 +16,6 @@ pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
 
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
-
     fn regs(&self) -> &GuestRegisters;
     fn regs_mut(&mut self) -> &mut GuestRegisters;
     fn instr_pointer(&self) -> u64;
@@ -25,16 +29,27 @@ pub trait VcpuAccessGuestState {
     }
 
     // Methods only available for x86 cpus:
-
     fn rflags(&self) -> u64;
+    fn fs_base(&self) -> u64;
+    fn gs_base(&self) -> u64;
     fn cr(&self, cr_idx: usize) -> u64;
     fn set_cr(&mut self, cr_idx: usize, val: u64);
 }
 
-pub const VM_EXIT_LEN_CPUID: u8 = 2;
-pub const VM_EXIT_LEN_RDMSR: u8 = 2;
-pub const VM_EXIT_LEN_WRMSR: u8 = 2;
-pub const VM_EXIT_LEN_HYPERCALL: u8 = 3;
+const VM_EXIT_LEN_CPUID: u8 = 2;
+const VM_EXIT_LEN_RDMSR: u8 = 2;
+const VM_EXIT_LEN_WRMSR: u8 = 2;
+const VM_EXIT_LEN_HYPERCALL: u8 = 3;
+
+const HOST_CR0: Cr0Flags = Cr0Flags::from_bits_truncate(
+    Cr0Flags::PAGING.bits()
+        | Cr0Flags::WRITE_PROTECT.bits()
+        | Cr0Flags::NUMERIC_ERROR.bits()
+        | Cr0Flags::TASK_SWITCHED.bits()
+        | Cr0Flags::MONITOR_COPROCESSOR.bits()
+        | Cr0Flags::PROTECTED_MODE_ENABLE.bits(),
+);
+const HOST_CR4: Cr4Flags = Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
 
 pub(super) struct VmExit<'a> {
     pub cpu_data: &'a mut PerCpu,
@@ -45,6 +60,27 @@ impl VmExit<'_> {
         Self {
             cpu_data: PerCpu::from_local_base_mut(),
         }
+    }
+
+    pub fn handle_msr_read(&mut self) -> HvResult {
+        let guest_regs = self.cpu_data.vcpu.regs_mut();
+        let id = guest_regs.rcx;
+        warn!("VM exit: RDMSR({:#x})", id);
+        // TODO
+        guest_regs.rax = 0;
+        guest_regs.rdx = 0;
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_RDMSR)?;
+        Ok(())
+    }
+
+    pub fn handle_msr_write(&mut self) -> HvResult {
+        let guest_regs = self.cpu_data.vcpu.regs();
+        let id = guest_regs.rcx;
+        let value = guest_regs.rax | (guest_regs.rdx << 32);
+        warn!("VM exit: WRMSR({:#x}) <- {:#x}", id, value);
+        // TODO
+        self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_WRMSR)?;
+        Ok(())
     }
 
     pub fn handle_cpuid(&mut self) -> HvResult {
@@ -97,8 +133,7 @@ impl VmExit<'_> {
     #[allow(dead_code)]
     fn test_read_guest_memory(&self, gvaddr: usize, size: usize) -> HvResult {
         use crate::cell;
-        use crate::memory::addr::phys_to_virt;
-        use crate::memory::GenericPageTable;
+        use crate::memory::{addr::phys_to_virt, GenericPageTable};
 
         let pt = self.cpu_data.vcpu.guest_page_table();
         let (gpaddr, _, _) = pt.query(gvaddr)?;

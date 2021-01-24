@@ -28,9 +28,9 @@ pub struct Vcpu {
     _vmxon_region: VmxRegion,
     /// VMCS of this CPU, required by VMX
     vmcs_region: VmxRegion,
-    /// Save guest general registers when VM exits.
+    /// Save guest general registers when handle VM exits.
     guest_regs: GuestRegisters,
-    /// RSP will be loaded from here when VM exits.
+    /// RSP will be loaded from here when handle VM exits.
     host_stack_top: u64,
 }
 
@@ -64,7 +64,7 @@ impl Vcpu {
         let cr4 = linux.cr4;
         // TODO: check reserved bits
         if cr4.contains(Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS) {
-            return hv_result_err!(EIO, "VMX is already turned on!");
+            return hv_result_err!(EBUSY, "VMX is already turned on!");
         }
 
         // Enable VMXON, if required.
@@ -84,25 +84,18 @@ impl Vcpu {
         let vmxon_region = VmxRegion::new(vmx_basic.revision_id, false)?;
         let vmcs_region = VmxRegion::new(vmx_basic.revision_id, false)?;
 
-        let cr0 = Cr0Flags::PAGING
-            | Cr0Flags::WRITE_PROTECT
-            | Cr0Flags::NUMERIC_ERROR
-            | Cr0Flags::TASK_SWITCHED
-            | Cr0Flags::MONITOR_COPROCESSOR
-            | Cr0Flags::PROTECTED_MODE_ENABLE;
-        let mut cr4 = Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS | Cr4Flags::PHYSICAL_ADDRESS_EXTENSION;
+        // bring CR0 and CR4 into well-defined states.
+        let mut cr4 = super::super::HOST_CR4 | Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS;
         if CpuFeatures::new().has_xsave() {
             cr4 |= Cr4Flags::OSXSAVE;
         }
-
         unsafe {
-            // Update control registers.
-            Cr0::write(cr0);
+            Cr0::write(super::super::HOST_CR0);
             Cr4::write(cr4);
-
-            // Execute VMXON.
-            vmx::vmxon(vmxon_region.paddr() as _)?;
         }
+
+        // Execute VMXON.
+        unsafe { vmx::vmxon(vmxon_region.paddr() as _)? };
         info!("successed to turn on VMX.");
 
         // Setup VMCS.
@@ -117,7 +110,7 @@ impl Vcpu {
         Ok(ret)
     }
 
-    pub fn exit(&mut self, linux: &mut LinuxContext) -> HvResult {
+    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
         self.load_vmcs_guest(linux)?;
         Vmcs::clear(self.vmcs_region.paddr())?;
         unsafe { vmx::vmxoff()? };
@@ -125,8 +118,24 @@ impl Vcpu {
         Ok(())
     }
 
-    pub fn activate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        unsafe { vmx_entry(linux) };
+    pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
+        let regs = self.regs_mut();
+        regs.rax = 0;
+        regs.rbx = linux.rbx;
+        regs.rbp = linux.rbp;
+        regs.r12 = linux.r12;
+        regs.r13 = linux.r13;
+        regs.r14 = linux.r14;
+        regs.r15 = linux.r15;
+        unsafe {
+            asm!(
+                "mov rsp, {0}",
+                restore_regs_from_stack!(),
+                "vmlaunch",
+                in(reg) &self.guest_regs as * const _ as usize,
+            );
+        }
+        // Never return if successful
         error!(
             "Activate hypervisor failed: {:?}",
             Vmcs::instruction_error()
@@ -139,10 +148,7 @@ impl Vcpu {
     }
 
     pub fn inject_fault(&mut self) -> HvResult {
-        Vmcs::inject_interrupt(
-            crate::arch::exception::ExceptionType::GeneralProtectionFault,
-            Some(0),
-        )?;
+        Vmcs::inject_interrupt(crate::arch::ExceptionType::GeneralProtectionFault, Some(0))?;
         Ok(())
     }
 
@@ -151,10 +157,9 @@ impl Vcpu {
         Ok(())
     }
 
-    pub fn guest_is_privileged(&self) -> HvResult<bool> {
-        let cs_atrr =
-            SegmentAccessRights::from_bits_truncate(VmcsField32Guest::CS_AR_BYTES.read()?);
-        Ok(cs_atrr.dpl() == 0)
+    pub fn guest_is_privileged(&self) -> bool {
+        SegmentAccessRights::from_bits_truncate(VmcsField32Guest::CS_AR_BYTES.read().unwrap()).dpl()
+            == 0
     }
 
     pub fn in_hypercall(&self) -> bool {
@@ -222,7 +227,7 @@ impl Vcpu {
 
         self.set_cr(0, linux.cr0.bits());
         self.set_cr(4, linux.cr4.bits());
-        VmcsField64Guest::CR3.write(linux.cr3)?;
+        self.set_cr(3, linux.cr3);
 
         set_guest_segment!(linux.cs, CS);
         set_guest_segment!(linux.ds, DS);
@@ -230,9 +235,8 @@ impl Vcpu {
         set_guest_segment!(linux.fs, FS);
         set_guest_segment!(linux.gs, GS);
         set_guest_segment!(linux.tss, TR);
-        let invalid_seg = Segment::invalid();
-        set_guest_segment!(invalid_seg, SS);
-        set_guest_segment!(invalid_seg, LDTR);
+        set_guest_segment!(Segment::invalid(), SS);
+        set_guest_segment!(Segment::invalid(), LDTR);
 
         VmcsField64Guest::GDTR_BASE.write(linux.gdt.base)?;
         VmcsField32Guest::GDTR_LIMIT.write(linux.gdt.limit as _)?;
@@ -390,6 +394,14 @@ impl VcpuAccessGuestState for Vcpu {
         VmcsField64Guest::RFLAGS.read().unwrap()
     }
 
+    fn fs_base(&self) -> u64 {
+        VmcsField64Guest::FS_BASE.read().unwrap()
+    }
+
+    fn gs_base(&self) -> u64 {
+        VmcsField64Guest::GS_BASE.read().unwrap()
+    }
+
     fn cr(&self, cr_idx: usize) -> u64 {
         (|| -> HvResult<u64> {
             Ok(match cr_idx {
@@ -457,51 +469,14 @@ impl Debug for Vcpu {
                 .field("cr0", unsafe { &Cr0Flags::from_bits_unchecked(self.cr(0)) })
                 .field("cr3", &self.cr(3))
                 .field("cr4", unsafe { &Cr4Flags::from_bits_unchecked(self.cr(4)) })
-                .field(
-                    "cs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::CS_SELECTOR.read()?),
-                )
-                .field(
-                    "ds",
-                    &SegmentSelector::from_raw(VmcsField16Guest::DS_SELECTOR.read()?),
-                )
-                .field(
-                    "es",
-                    &SegmentSelector::from_raw(VmcsField16Guest::ES_SELECTOR.read()?),
-                )
-                .field(
-                    "fs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::FS_SELECTOR.read()?),
-                )
+                .field("cs", &VmcsField16Guest::CS_SELECTOR.read()?)
                 .field("fs_base", &VmcsField64Guest::FS_BASE.read()?)
-                .field(
-                    "gs",
-                    &SegmentSelector::from_raw(VmcsField16Guest::GS_SELECTOR.read()?),
-                )
                 .field("gs_base", &VmcsField64Guest::GS_BASE.read()?)
-                .field(
-                    "tss",
-                    &SegmentSelector::from_raw(VmcsField16Guest::TR_SELECTOR.read()?),
-                )
+                .field("tss", &VmcsField16Guest::TR_SELECTOR.read()?)
                 .finish())
         })()
         .unwrap()
     }
-}
-
-unsafe fn vmx_entry(linux: &LinuxContext) {
-    asm!("
-        mov rbp, {0}
-        vmlaunch",
-        in(reg) linux.rbp,
-        in("r15") linux.r15,
-        in("r14") linux.r14,
-        in("r13") linux.r13,
-        in("r12") linux.r12,
-        in("rbx") linux.rbx,
-        in("rax") 0,
-    );
-    // Never return if successful
 }
 
 #[naked]
@@ -510,10 +485,10 @@ unsafe fn vmx_entry(linux: &LinuxContext) {
 unsafe extern "sysv64" fn vmx_exit() -> ! {
     asm!(
         save_regs_to_stack!(),
-        "mov r15, rsp",         // save temporary rsp to r15
+        "mov r15, rsp",         // save temporary RSP to r15
         "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
         "call {1}",             // call vmexit_handler
-        "mov rsp, r15",         // load temporary rsp from r15
+        "mov rsp, r15",         // load temporary RSP from r15
         restore_regs_from_stack!(),
         "vmresume",
         const core::mem::size_of::<GuestRegisters>(),

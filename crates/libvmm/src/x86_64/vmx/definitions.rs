@@ -116,30 +116,3 @@ impl Debug for VmxInstructionError {
         write!(f, "VmxInstructionError({}, {:?})", self.0, self.as_str())
     }
 }
-
-#[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
-pub struct InvEptDescriptor {
-    /// EPT pointer (EPTP)
-    eptp: u64,
-    /// Reserved (must be zero)
-    _reserved: u64,
-}
-
-impl InvEptDescriptor {
-    pub fn new(eptp: u64) -> Self {
-        Self { eptp, _reserved: 0 }
-    }
-}
-
-#[repr(u64)]
-#[derive(Debug)]
-pub enum InvEptType {
-    /// The logical processor invalidates all mappings associated with bits
-    /// 51:12 of the EPT pointer (EPTP) specified in the INVEPT descriptor.
-    /// It may invalidate other mappings as well.
-    SingleContext = 1,
-
-    /// The logical processor invalidates mappings associated with all EPTPs.
-    Global = 2,
-}

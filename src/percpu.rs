@@ -87,7 +87,7 @@ impl PerCpu {
             PER_CPU_SIZE,
             MemFlags::READ | MemFlags::WRITE,
         ))?;
-        debug!("PerCpu host virtual memory set: {:#x?}", hvm);
+        trace!("PerCpu host virtual memory set: {:#x?}", hvm);
         unsafe {
             // avoid dropping, same below
             core::ptr::write(&mut self.hvm, hvm);

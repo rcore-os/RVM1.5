@@ -122,6 +122,7 @@ impl IDTStruct {
         unsafe { lidt(pointer) };
     }
 
+    #[allow(dead_code)]
     pub fn pointer(&self) -> &DescriptorTablePointer {
         &self.pointer
     }
