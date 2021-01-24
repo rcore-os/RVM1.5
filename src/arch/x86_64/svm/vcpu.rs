@@ -275,7 +275,7 @@ impl VcpuAccessGuestState for Vcpu {
     }
 
     fn gs_base(&self) -> u64 {
-        Msr::IA32_FS_BASE.read()
+        Msr::IA32_GS_BASE.read()
     }
 
     fn cr(&self, cr_idx: usize) -> u64 {

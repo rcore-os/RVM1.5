@@ -48,6 +48,7 @@ bitflags! {
 }
 
 impl SegmentAccessRights {
+    #[allow(dead_code)]
     pub fn dpl(&self) -> u8 {
         self.bits().get_bits(5..=6) as _
     }

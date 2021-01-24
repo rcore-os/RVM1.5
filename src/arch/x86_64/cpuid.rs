@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "svm", allow(dead_code))]
+
 use bitflags::bitflags;
 
 pub use raw_cpuid::{cpuid, CpuId};
