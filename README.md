@@ -28,7 +28,7 @@ make [VENDOR=intel|amd] [LOG=warn|info|debug|trace]
     make qemu           # execute this command only for subsequent runs
     ```
 
-    You can login the guest OS via SSH. The default password is `guest`. The default port is `2333` and can be changed by QEMU arguments.
+    You can login the guest OS via SSH. The default username and password is `ubuntu` and `guest`. The default port is `2333` and can be changed by QEMU arguments.
 
 2. Copy helpful scripts into the guest OS:
 

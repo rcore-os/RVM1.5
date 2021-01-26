@@ -11,7 +11,8 @@ use core::ops::{Deref, DerefMut};
 pub use addr::{GuestPhysAddr, GuestVirtAddr, HostPhysAddr, HostVirtAddr, PhysAddr, VirtAddr};
 pub use frame::Frame;
 pub use mm::{MemoryRegion, MemorySet};
-pub use paging::{GenericPTE, GenericPageTable, Level4PageTable, MemFlags, PagingInstr};
+pub use paging::{GenericPTE, MemFlags, PagingInstr};
+pub use paging::{GenericPageTable, GenericPageTableImmut, Level4PageTable, Level4PageTableImmut};
 
 pub const PAGE_SIZE: usize = paging::PageSize::Size4K as usize;
 

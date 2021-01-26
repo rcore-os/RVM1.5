@@ -6,7 +6,8 @@ use x86_64::{
     structures::paging::PhysFrame,
 };
 
-use crate::memory::{GenericPTE, Level4PageTable, MemFlags, PagingInstr, PhysAddr, VirtAddr};
+use crate::memory::{GenericPTE, MemFlags, PagingInstr, PhysAddr, VirtAddr};
+use crate::memory::{Level4PageTable, Level4PageTableImmut};
 
 impl From<MemFlags> for PTF {
     fn from(f: MemFlags) -> Self {
@@ -109,3 +110,4 @@ impl PagingInstr for X86PagingInstr {
 }
 
 pub type PageTable = Level4PageTable<VirtAddr, PTEntry, X86PagingInstr>;
+pub type PageTableImmut = Level4PageTableImmut<VirtAddr, PTEntry>;

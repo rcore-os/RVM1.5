@@ -68,8 +68,18 @@ impl Cell<'_> {
         // guest RAM
         for region in cell_config.mem_regions() {
             if region.flags.contains(MemFlags::EXECUTE) {
+                let hv_virt_start = phys_to_virt(region.virt_start as GuestPhysAddr);
+                if hv_virt_start < region.virt_start as GuestPhysAddr {
+                    return hv_result_err!(
+                        EINVAL,
+                        format!(
+                            "Guest physical address {:#x} is too large",
+                            region.virt_start
+                        )
+                    );
+                }
                 hvm.insert(MemoryRegion::new_with_offset_mapper(
-                    phys_to_virt(region.virt_start as GuestPhysAddr),
+                    hv_virt_start,
                     region.phys_start as HostPhysAddr,
                     region.size as usize,
                     region.flags,

@@ -5,7 +5,7 @@ use bit_field::BitField;
 use numeric_enum_macro::numeric_enum;
 
 use crate::arch::vmm::VcpuAccessGuestState;
-use crate::arch::GuestPageTable;
+use crate::arch::GuestPageTableImmut;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
 
@@ -27,7 +27,7 @@ pub type HyperCallResult = HvResult<usize>;
 
 pub struct HyperCall<'a> {
     cpu_data: &'a mut PerCpu,
-    _gpt: GuestPageTable,
+    _gpt: GuestPageTableImmut,
 }
 
 impl<'a> HyperCall<'a> {

@@ -133,7 +133,7 @@ impl VmExit<'_> {
     #[allow(dead_code)]
     fn test_read_guest_memory(&self, gvaddr: usize, size: usize) -> HvResult {
         use crate::cell;
-        use crate::memory::{addr::phys_to_virt, GenericPageTable};
+        use crate::memory::{addr::phys_to_virt, GenericPageTableImmut};
 
         let pt = self.cpu_data.vcpu.guest_page_table();
         let (gpaddr, _, _) = pt.query(gvaddr)?;

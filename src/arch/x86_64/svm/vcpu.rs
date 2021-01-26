@@ -11,10 +11,10 @@ use x86_64::structures::DescriptorTablePointer;
 
 use crate::arch::segmentation::Segment;
 use crate::arch::vmm::VcpuAccessGuestState;
-use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
+use crate::arch::{GuestPageTableImmut, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
-use crate::memory::{addr::virt_to_phys, Frame, GenericPageTable};
+use crate::memory::{addr::virt_to_phys, Frame, GenericPageTableImmut};
 use crate::percpu::PerCpu;
 
 #[repr(C)]
@@ -145,9 +145,9 @@ impl Vcpu {
         )
     }
 
-    pub fn guest_page_table(&self) -> GuestPageTable {
+    pub fn guest_page_table(&self) -> GuestPageTableImmut {
         use crate::memory::addr::align_down;
-        unsafe { GuestPageTable::from_root(align_down(self.vmcb.save.cr3 as _)) }
+        unsafe { GuestPageTableImmut::from_root(align_down(self.vmcb.save.cr3 as _)) }
     }
 }
 

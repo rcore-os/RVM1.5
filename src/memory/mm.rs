@@ -93,6 +93,9 @@ where
 
     /// Add a memory region to this set.
     pub fn insert(&mut self, region: MemoryRegion<PT::VA>) -> HvResult {
+        if region.size == 0 {
+            return Ok(());
+        }
         if !self.test_free_area(&region) {
             warn!(
                 "MemoryRegion overlapped in MemorySet: {:#x?}\n{:#x?}",

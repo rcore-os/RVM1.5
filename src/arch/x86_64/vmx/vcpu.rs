@@ -18,7 +18,7 @@ use crate::arch::cpuid::CpuFeatures;
 use crate::arch::segmentation::{Segment, SegmentAccessRights};
 use crate::arch::tables::{GDTStruct, GDT, IDT};
 use crate::arch::vmm::VcpuAccessGuestState;
-use crate::arch::{GuestPageTable, GuestRegisters, LinuxContext};
+use crate::arch::{GuestPageTableImmut, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
 
@@ -166,9 +166,9 @@ impl Vcpu {
         matches!(Vmcs::exit_reason(), Ok(VmxExitReason::VMCALL))
     }
 
-    pub fn guest_page_table(&self) -> GuestPageTable {
-        use crate::memory::{addr::align_down, GenericPageTable};
-        unsafe { GuestPageTable::from_root(align_down(self.cr(3) as _)) }
+    pub fn guest_page_table(&self) -> GuestPageTableImmut {
+        use crate::memory::{addr::align_down, GenericPageTableImmut};
+        unsafe { GuestPageTableImmut::from_root(align_down(self.cr(3) as _)) }
     }
 }
 

@@ -5,13 +5,13 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 
 use super::addr::{page_offset, phys_to_virt, GuestPhysAddr, GuestVirtAddr};
-use super::GenericPageTable;
-use crate::arch::GuestPageTable;
+use super::GenericPageTableImmut;
+use crate::arch::GuestPageTableImmut;
 use crate::error::HvResult;
 
 pub struct GuestPtr<'a, T, P: Policy> {
     gvaddr: GuestVirtAddr,
-    guest_pt: &'a GuestPageTable,
+    guest_pt: &'a GuestPageTableImmut,
     mark: PhantomData<(T, P)>,
 }
 
@@ -34,11 +34,11 @@ pub type GuestInPtr<'a, T> = GuestPtr<'a, T, In>;
 pub type GuestOutPtr<'a, T> = GuestPtr<'a, T, Out>;
 
 pub trait AsGuestPtr: Copy {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTable) -> GuestPtr<'_, T, P>;
+    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P>;
 }
 
 impl AsGuestPtr for GuestVirtAddr {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTable) -> GuestPtr<'_, T, P> {
+    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P> {
         GuestPtr {
             gvaddr: self,
             guest_pt,
@@ -48,7 +48,7 @@ impl AsGuestPtr for GuestVirtAddr {
 }
 
 impl AsGuestPtr for u64 {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTable) -> GuestPtr<'_, T, P> {
+    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P> {
         GuestPtr {
             gvaddr: self as _,
             guest_pt,
