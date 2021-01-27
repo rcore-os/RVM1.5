@@ -10,6 +10,7 @@ description = "A Type-1.5 hypervisor written in Rust."
 [features]
 vmx = ["libvmm/vmx"]
 svm = ["libvmm/svm"]
+stats = []
 
 [dependencies]
 log = "0.4"

@@ -15,6 +15,7 @@ pub fn init() {
     });
 }
 
+#[cfg(not(test))]
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ({
@@ -22,6 +23,7 @@ macro_rules! print {
     });
 }
 
+#[cfg(not(test))]
 #[macro_export]
 macro_rules! println {
     ($fmt:expr) => (print!(concat!($fmt, "\n")));

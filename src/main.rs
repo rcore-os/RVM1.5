@@ -29,6 +29,7 @@ mod header;
 mod hypercall;
 mod memory;
 mod percpu;
+mod stats;
 
 #[cfg(not(test))]
 mod lang;
@@ -65,16 +66,31 @@ fn wait_for_other_completed(counter: &AtomicUsize, max_value: usize) -> HvResult
     }
 }
 
-fn primary_init_early(cpu_id: usize) -> HvResult {
+fn primary_init_early() -> HvResult {
     logging::init();
     info!("Primary CPU init early...");
 
     let system_config = HvSystemConfig::get();
     let sign = core::str::from_utf8(&system_config.signature).unwrap();
     println!(
-        "\nInitializing hypervisor on CPU {}: signature: {:?}, revision: {}",
-        cpu_id, sign, system_config.revision,
+        "\n\
+        Initializing hypervisor...\n\
+        signature = {:?}\n\
+        revision = {}\n\
+        arch = {}\n\
+        vendor = {}\n\
+        stats = {}\n\
+        log_level = {}\n\
+        build_mode = {}\n",
+        sign,
+        system_config.revision,
+        option_env!("ARCH").unwrap_or(""),
+        option_env!("VENDOR").unwrap_or(""),
+        option_env!("STATS").unwrap_or(""),
+        option_env!("LOG").unwrap_or(""),
+        option_env!("MODE").unwrap_or(""),
     );
+
     info!("Hypervisor header: {:#x?}", HvHeader::get());
     debug!("System config: {:#x?}", system_config);
 
@@ -103,7 +119,7 @@ fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
     );
 
     if is_primary {
-        primary_init_early(cpu_id)?;
+        primary_init_early()?;
     } else {
         wait_for_other_completed(&INIT_EARLY_OK, 1)?;
     }

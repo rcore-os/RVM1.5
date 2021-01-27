@@ -1,11 +1,16 @@
 ARCH ?= x86_64
 VENDOR ?= intel
 LOG ?=
+STATS ?= off
 
 # do not support debug mode
 MODE := release
 
 export ARCH
+export VENDOR
+export LOG
+export STATS
+export MODE
 
 OBJDUMP ?= objdump
 OBJCOPY ?= objcopy
@@ -23,6 +28,10 @@ features += --features svm
 else
 $(error VENDOR must be either "intel" or "amd" for x86_64 architecture)
 endif
+endif
+
+ifeq ($(STATS), on)
+features += --features stats
 endif
 
 build_args := $(features) --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
@@ -47,7 +56,7 @@ clippy:
 	cargo clippy $(build_args)
 
 test:
-	cargo test $(features)
+	cargo test $(features) --release -- --nocapture
 
 fmt:
 	cargo fmt
