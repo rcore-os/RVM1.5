@@ -1,8 +1,7 @@
 use bit_field::BitField;
 
 use crate::error::HvResult;
-use crate::memory::addr::virt_to_phys;
-use crate::memory::{AlignedPage, Frame, PhysAddr};
+use crate::memory::{addr::virt_to_phys, AlignedPage, Frame, PhysAddr};
 
 pub(super) struct VmxRegion {
     frame: Frame,

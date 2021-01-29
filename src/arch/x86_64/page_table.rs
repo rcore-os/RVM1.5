@@ -1,8 +1,10 @@
+use core::fmt::{Debug, Formatter, Result};
+
 use x86_64::{
     addr::{PhysAddr as X86PhysAddr, VirtAddr as X86VirtAddr},
     instructions::tlb,
     registers::control::{Cr3, Cr3Flags},
-    structures::paging::page_table::{PageTableEntry as PTE, PageTableFlags as PTF},
+    structures::paging::page_table::PageTableFlags as PTF,
     structures::paging::PhysFrame,
 };
 
@@ -47,46 +49,54 @@ impl From<PTF> for MemFlags {
     }
 }
 
-#[repr(transparent)]
-#[derive(Clone, Debug)]
-pub struct PTEntry(PTE);
+const PHYS_ADDR_MASK: u64 = 0x000f_ffff_ffff_f000; // 12..52
+
+#[derive(Clone)]
+pub struct PTEntry(u64);
 
 impl GenericPTE for PTEntry {
     fn addr(&self) -> PhysAddr {
-        self.0.addr().as_u64() as _
+        (self.0 & PHYS_ADDR_MASK) as _
     }
     fn flags(&self) -> MemFlags {
-        self.0.flags().into()
+        PTF::from_bits_truncate(self.0).into()
     }
     fn is_unused(&self) -> bool {
-        self.0.is_unused()
+        self.0 == 0
     }
     fn is_present(&self) -> bool {
-        self.0.flags().contains(PTF::PRESENT)
+        PTF::from_bits_truncate(self.0).contains(PTF::PRESENT)
     }
     fn is_huge(&self) -> bool {
-        self.0.flags().contains(PTF::HUGE_PAGE)
+        PTF::from_bits_truncate(self.0).contains(PTF::HUGE_PAGE)
     }
 
     fn set_addr(&mut self, paddr: PhysAddr) {
-        self.0
-            .set_addr(X86PhysAddr::new(paddr as _), self.0.flags())
+        self.0 = (self.0 & !PHYS_ADDR_MASK) | (paddr as u64 & PHYS_ADDR_MASK);
     }
     fn set_flags(&mut self, flags: MemFlags, is_huge: bool) {
-        let mut flags = flags.into();
+        let mut flags: PTF = flags.into();
         if is_huge {
             flags |= PTF::HUGE_PAGE;
         }
-        self.0.set_flags(flags)
+        self.0 = self.addr() as u64 | flags.bits();
     }
     fn set_table(&mut self, paddr: PhysAddr) {
-        self.0.set_addr(
-            X86PhysAddr::new(paddr as _),
-            PTF::PRESENT | PTF::WRITABLE | PTF::USER_ACCESSIBLE,
-        )
+        self.0 = (paddr as u64 & PHYS_ADDR_MASK)
+            | (PTF::PRESENT | PTF::WRITABLE | PTF::USER_ACCESSIBLE).bits();
     }
     fn clear(&mut self) {
-        self.0.set_unused()
+        self.0 = 0
+    }
+}
+
+impl Debug for PTEntry {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let mut f = f.debug_struct("PTEntry");
+        f.field("raw", &self.0);
+        f.field("addr", &self.addr());
+        f.field("flags", &self.flags());
+        f.finish()
     }
 }
 

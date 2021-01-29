@@ -1,11 +1,10 @@
 use alloc::{sync::Arc, vec::Vec};
 use core::{fmt::Debug, marker::PhantomData, slice};
 
-use bitflags::bitflags;
 use spin::Mutex;
 
 use super::addr::{phys_to_virt, PhysAddr};
-use super::{Frame, MemoryRegion};
+use super::{Frame, MemFlags, MemoryRegion};
 use crate::error::{HvError, HvResult};
 
 #[derive(Debug)]
@@ -63,19 +62,6 @@ impl<VA: Into<usize> + Copy> Page<VA> {
     pub fn new_aligned(vaddr: VA, size: PageSize) -> Self {
         debug_assert!(size.is_aligned(vaddr.into()));
         Self { vaddr, size }
-    }
-}
-
-bitflags! {
-    pub struct MemFlags: u64 {
-        const READ          = 1 << 0;
-        const WRITE         = 1 << 1;
-        const EXECUTE       = 1 << 2;
-        const DMA           = 1 << 3;
-        const IO            = 1 << 4;
-        const COMM_REGION   = 1 << 5;
-        const NO_HUGEPAGES  = 1 << 8;
-        const USER          = 1 << 9;
     }
 }
 
@@ -521,12 +507,12 @@ const fn p1_index(vaddr: usize) -> usize {
 
 fn table_of<'a, E>(paddr: PhysAddr) -> &'a [E] {
     let ptr = phys_to_virt(paddr) as *const E;
-    unsafe { core::slice::from_raw_parts(ptr, ENTRY_COUNT) }
+    unsafe { slice::from_raw_parts(ptr, ENTRY_COUNT) }
 }
 
 fn table_of_mut<'a, E>(paddr: PhysAddr) -> &'a mut [E] {
     let ptr = phys_to_virt(paddr) as *mut E;
-    unsafe { core::slice::from_raw_parts_mut(ptr, ENTRY_COUNT) }
+    unsafe { slice::from_raw_parts_mut(ptr, ENTRY_COUNT) }
 }
 
 fn next_table_mut<'a, E: GenericPTE>(entry: &E) -> PagingResult<&'a mut [E]> {

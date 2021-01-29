@@ -140,6 +140,7 @@ impl EPTEntry {
 impl fmt::Debug for EPTEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("EPTEntry")
+            .field("raw", &self.0)
             .field("hpaddr", &self.addr())
             .field("flags", &self.ept_flags())
             .field("memory_type", &self.memory_type())

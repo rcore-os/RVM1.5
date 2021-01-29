@@ -2,12 +2,11 @@
 
 //! Memory management.
 
-use alloc::collections::btree_map::{BTreeMap, Entry, Values};
+use alloc::collections::btree_map::{BTreeMap, Entry};
 use core::fmt::{Debug, Formatter, Result};
 
 use super::addr::{align_down, align_up};
-use super::mapper::Mapper;
-use super::paging::{GenericPageTable, MemFlags};
+use super::{mapper::Mapper, paging::GenericPageTable, MemFlags};
 use crate::error::HvResult;
 
 #[derive(Clone)]
@@ -59,22 +58,11 @@ where
         }
     }
 
-    pub fn new_with_page_table(pt: PT) -> Self {
-        Self {
-            regions: BTreeMap::new(),
-            pt,
-        }
-    }
-
     pub fn clone(&self) -> Self {
         Self {
             regions: self.regions.clone(),
             pt: self.pt.clone(),
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.regions.len()
     }
 
     fn test_free_area(&self, other: &MemoryRegion<PT::VA>) -> bool {
@@ -132,20 +120,12 @@ where
         self.regions.clear();
     }
 
-    pub fn iter(&self) -> Values<'_, PT::VA, MemoryRegion<PT::VA>> {
-        self.regions.values()
-    }
-
     pub unsafe fn activate(&self) {
         self.pt.activate();
     }
 
     pub fn page_table(&self) -> &PT {
         &self.pt
-    }
-
-    pub fn page_table_mut(&mut self) -> &mut PT {
-        &mut self.pt
     }
 }
 

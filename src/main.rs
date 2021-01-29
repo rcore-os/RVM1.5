@@ -77,18 +77,19 @@ fn primary_init_early() -> HvResult {
         Initializing hypervisor...\n\
         signature = {:?}\n\
         revision = {}\n\
+        build_mode = {}\n\
+        log_level = {}\n\
         arch = {}\n\
         vendor = {}\n\
         stats = {}\n\
-        log_level = {}\n\
-        build_mode = {}\n",
+        ",
         sign,
         system_config.revision,
+        option_env!("MODE").unwrap_or(""),
+        option_env!("LOG").unwrap_or(""),
         option_env!("ARCH").unwrap_or(""),
         option_env!("VENDOR").unwrap_or(""),
-        option_env!("STATS").unwrap_or(""),
-        option_env!("LOG").unwrap_or(""),
-        option_env!("MODE").unwrap_or(""),
+        option_env!("STATS").unwrap_or("off"),
     );
 
     info!("Hypervisor header: {:#x?}", HvHeader::get());

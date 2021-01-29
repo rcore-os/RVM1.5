@@ -1,3 +1,17 @@
+# Commands:
+#   make build                  Build
+#   make test                   Run `cargo test`
+#   make fmt                    Run `cargo fmt`
+#   make clippy                 Run `cargo clippy`
+#   make disasm                 Open the disassemble file of the last build
+#   make clean                  Clean
+#
+# Options:
+#   LOG  = off | error | warn | info | debug | trace
+#   ARCH = x86_64
+#   VENDOR = intel | amd        [ x86_64 only ] Build for Intel or AMD CPUs.
+#   STATS = on | off            Given performance statistics.
+
 ARCH ?= x86_64
 VENDOR ?= intel
 LOG ?=
@@ -6,11 +20,11 @@ STATS ?= off
 # do not support debug mode
 MODE := release
 
+export MODE
+export LOG
 export ARCH
 export VENDOR
-export LOG
 export STATS
-export MODE
 
 OBJDUMP ?= objdump
 OBJCOPY ?= objcopy

@@ -6,7 +6,7 @@ use libvmm::svm::flags::{VmCr, VmCrFlags};
 
 use crate::error::HvResult;
 
-pub use npt::NestedPageTable as HvPageTable;
+pub use npt::NestedPageTable;
 pub use vcpu::Vcpu;
 
 pub fn check_hypervisor_feature() -> HvResult {

@@ -55,6 +55,7 @@ fn exception_handler(frame: &ExceptionFrame) {
     trace!("Exception or interrupt #{:#x}", frame.num);
     match frame.num as u8 {
         ExceptionType::NonMaskableInterrupt => handle_nmi(),
+        ExceptionType::PageFault => handle_page_fault(frame),
         ExceptionType::IrqStart..=ExceptionType::IrqEnd => {
             error!("{:#x?}", frame);
             panic!("Unhandled interrupt #{:#x}", frame.num);
@@ -68,6 +69,15 @@ fn exception_handler(frame: &ExceptionFrame) {
 
 fn handle_nmi() {
     warn!("Unhandled exception: NMI");
+}
+
+fn handle_page_fault(frame: &ExceptionFrame) {
+    panic!(
+        "Unhandled hypervisor page fault @ {:#x?}, error_code={:#x}: {:#x?}",
+        x86_64::registers::control::Cr2::read(),
+        frame.error_code,
+        frame
+    );
 }
 
 #[naked]

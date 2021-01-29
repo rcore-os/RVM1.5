@@ -1,26 +1,25 @@
 use spin::RwLock;
 
-use crate::arch::{HostPageTable, HvPageTable};
+use crate::arch::{HostPageTable, NestedPageTable};
 use crate::config::{CellConfig, HvSystemConfig};
 use crate::consts::{HV_BASE, PER_CPU_SIZE};
 use crate::error::HvResult;
 use crate::header::HvHeader;
-use crate::memory::{
-    addr::phys_to_virt, GuestPhysAddr, HostPhysAddr, MemFlags, MemoryRegion, MemorySet,
-};
+use crate::memory::addr::{phys_to_virt, GuestPhysAddr, HostPhysAddr};
+use crate::memory::{MemFlags, MemoryRegion, MemorySet};
 
 #[derive(Debug)]
 pub struct Cell<'a> {
     /// Cell configuration.
     pub config: CellConfig<'a>,
     /// Guest physical memory set.
-    pub gpm: RwLock<MemorySet<HvPageTable>>,
+    pub gpm: RwLock<MemorySet<NestedPageTable>>,
     /// Host virtual memory set.
     pub hvm: RwLock<MemorySet<HostPageTable>>,
 }
 
 impl Cell<'_> {
-    pub fn new_root() -> HvResult<Self> {
+    fn new_root() -> HvResult<Self> {
         let header = HvHeader::get();
         let sys_config = HvSystemConfig::get();
         let cell_config = sys_config.root_cell.config();
@@ -65,7 +64,7 @@ impl Cell<'_> {
             hv_phys_size - core_and_percpu_size,
             MemFlags::READ | MemFlags::WRITE,
         ))?;
-        // guest RAM
+        // to directly access all guest RAM
         for region in cell_config.mem_regions() {
             if region.flags.contains(MemFlags::EXECUTE) {
                 let hv_virt_start = phys_to_virt(region.virt_start as GuestPhysAddr);

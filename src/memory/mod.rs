@@ -8,13 +8,28 @@ mod paging;
 
 use core::ops::{Deref, DerefMut};
 
+use bitflags::bitflags;
+
 pub use addr::{GuestPhysAddr, GuestVirtAddr, HostPhysAddr, HostVirtAddr, PhysAddr, VirtAddr};
 pub use frame::Frame;
 pub use mm::{MemoryRegion, MemorySet};
-pub use paging::{GenericPTE, MemFlags, PagingInstr};
+pub use paging::{GenericPTE, PagingInstr};
 pub use paging::{GenericPageTable, GenericPageTableImmut, Level4PageTable, Level4PageTableImmut};
 
 pub const PAGE_SIZE: usize = paging::PageSize::Size4K as usize;
+
+bitflags! {
+    pub struct MemFlags: u64 {
+        const READ          = 1 << 0;
+        const WRITE         = 1 << 1;
+        const EXECUTE       = 1 << 2;
+        const DMA           = 1 << 3;
+        const IO            = 1 << 4;
+        const COMM_REGION   = 1 << 5;
+        const NO_HUGEPAGES  = 1 << 8;
+        const USER          = 1 << 9;
+    }
+}
 
 #[repr(align(4096))]
 pub struct AlignedPage([u8; PAGE_SIZE]);

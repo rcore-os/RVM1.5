@@ -9,7 +9,7 @@ use x86::vmx::VmFail;
 use crate::arch::cpuid::CpuFeatures;
 use crate::error::{HvError, HvResult};
 
-pub use ept::ExtendedPageTable as HvPageTable;
+pub use ept::ExtendedPageTable as NestedPageTable;
 pub use vcpu::Vcpu;
 
 impl From<VmFail> for HvError {

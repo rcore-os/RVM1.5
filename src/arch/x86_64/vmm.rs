@@ -12,7 +12,7 @@ use super::GuestRegisters;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
 
-pub use vendor::{check_hypervisor_feature, HvPageTable, Vcpu};
+pub use vendor::{check_hypervisor_feature, NestedPageTable, Vcpu};
 
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
@@ -138,11 +138,12 @@ impl VmExit<'_> {
         let pt = self.cpu_data.vcpu.guest_page_table();
         let (gpaddr, _, _) = pt.query(gvaddr)?;
         let (hpaddr, _, _) = cell::ROOT_CELL.gpm.read().page_table().query(gpaddr)?;
-        let buf = unsafe { core::slice::from_raw_parts(phys_to_virt(hpaddr) as *const u8, size) };
         println!(
-            "GVA({:#x?}) -> GPA({:#x?}) -> HPA({:#x?}): {:02X?}",
-            gvaddr, gpaddr, hpaddr, buf
+            "GVA({:#x?}) -> GPA({:#x?}) -> HPA({:#x?}):",
+            gvaddr, gpaddr, hpaddr
         );
+        let buf = unsafe { core::slice::from_raw_parts(phys_to_virt(gpaddr) as *const u8, size) };
+        println!("{:02X?}", buf);
         Ok(())
     }
 }
