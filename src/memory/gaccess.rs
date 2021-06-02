@@ -9,36 +9,18 @@ use super::GenericPageTableImmut;
 use crate::arch::GuestPageTableImmut;
 use crate::error::HvResult;
 
-pub struct GuestPtr<'a, T, P: Policy> {
+pub struct GuestPtr<'a, T> {
     gvaddr: GuestVirtAddr,
     guest_pt: &'a GuestPageTableImmut,
-    mark: PhantomData<(T, P)>,
+    mark: PhantomData<T>,
 }
 
-pub trait Policy {}
-pub trait Read: Policy {}
-pub trait Write: Policy {}
-pub enum In {}
-pub enum Out {}
-pub enum InOut {}
-
-impl Policy for In {}
-impl Policy for Out {}
-impl Policy for InOut {}
-impl Read for In {}
-impl Write for Out {}
-impl Read for InOut {}
-impl Write for InOut {}
-
-pub type GuestInPtr<'a, T> = GuestPtr<'a, T, In>;
-pub type GuestOutPtr<'a, T> = GuestPtr<'a, T, Out>;
-
 pub trait AsGuestPtr: Copy {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P>;
+    fn as_guest_ptr<T>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T>;
 }
 
 impl AsGuestPtr for GuestVirtAddr {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P> {
+    fn as_guest_ptr<T>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T> {
         GuestPtr {
             gvaddr: self,
             guest_pt,
@@ -48,28 +30,31 @@ impl AsGuestPtr for GuestVirtAddr {
 }
 
 impl AsGuestPtr for u64 {
-    fn as_guest_ptr<T, P: Policy>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T, P> {
-        GuestPtr {
-            gvaddr: self as _,
-            guest_pt,
-            mark: PhantomData,
-        }
+    fn as_guest_ptr<T>(self, guest_pt: &GuestPageTableImmut) -> GuestPtr<'_, T> {
+        (self as GuestVirtAddr).as_guest_ptr(guest_pt)
     }
 }
 
-impl<T, P: Policy> Debug for GuestPtr<'_, T, P> {
+impl<T> Debug for GuestPtr<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{:#x?}", self.gvaddr)
     }
 }
 
-impl<T, P: Policy> GuestPtr<'_, T, P> {
-    pub fn _guest_vaddr(&self) -> GuestVirtAddr {
+impl<T> GuestPtr<'_, T> {
+    pub fn guest_vaddr(&self) -> GuestVirtAddr {
         self.gvaddr
     }
 
     pub fn as_guest_paddr(&self) -> HvResult<GuestPhysAddr> {
-        Ok(self.guest_pt.query(self.gvaddr)?.0)
+        let gpaddr = self.guest_pt.query(self.gvaddr)?.0;
+        Self::check_gpaddr(gpaddr)?;
+        Ok(gpaddr)
+    }
+
+    fn check_gpaddr(_gpaddr: GuestPhysAddr) -> HvResult {
+        // TODO
+        Ok(())
     }
 
     fn check_raw(addr: usize) -> HvResult {
@@ -82,14 +67,12 @@ impl<T, P: Policy> GuestPtr<'_, T, P> {
         Ok(())
     }
 
-    fn check(&self) -> HvResult {
+    fn check_ptr(&self) -> HvResult {
         Self::check_raw(self.gvaddr)
     }
-}
 
-impl<T, P: Read> GuestPtr<'_, T, P> {
     pub fn read(&self) -> HvResult<T> {
-        self.check()?;
+        self.check_ptr()?;
         let mut ret = core::mem::MaybeUninit::uninit();
         let mut dst = ret.as_mut_ptr() as *mut u8;
 
@@ -97,6 +80,7 @@ impl<T, P: Read> GuestPtr<'_, T, P> {
         let mut size = size_of::<T>();
         while size > 0 {
             let (gpaddr, _, pg_size) = self.guest_pt.query(gvaddr)?;
+            Self::check_gpaddr(gpaddr)?;
             let pgoff = pg_size.page_offset(gvaddr);
             let read_size = (pg_size as usize - pgoff).min(size);
             gvaddr += read_size;
@@ -109,20 +93,33 @@ impl<T, P: Read> GuestPtr<'_, T, P> {
         unsafe { Ok(ret.assume_init()) }
     }
 
-    pub fn read_from_gpaddr(gpaddr: GuestPhysAddr) -> HvResult<T> {
-        Self::check_raw(gpaddr)?;
-        let mut ret = core::mem::MaybeUninit::uninit();
-        unsafe {
-            (ret.as_mut_ptr() as *mut T)
-                .copy_from_nonoverlapping(phys_to_virt(gpaddr) as *const T, 1);
-            Ok(ret.assume_init())
+    pub fn _write(&mut self, data: T) -> HvResult {
+        self.check_ptr()?;
+        let mut src = &data as *const _ as *const u8;
+
+        let mut gvaddr = self.gvaddr;
+        let mut size = size_of::<T>();
+        while size > 0 {
+            let (gpaddr, _, pg_size) = self.guest_pt.query(gvaddr)?;
+            Self::check_gpaddr(gpaddr)?;
+            let pgoff = pg_size.page_offset(gvaddr);
+            let write_size = (pg_size as usize - pgoff).min(size);
+            gvaddr += write_size;
+            size -= write_size;
+            let dst = phys_to_virt(gpaddr) as *mut u8;
+            unsafe {
+                dst.copy_from_nonoverlapping(src, write_size);
+                src = src.add(write_size);
+            }
         }
+        Ok(())
     }
 
     pub fn as_ref(&self) -> HvResult<&T> {
-        self.check()?;
+        self.check_ptr()?;
         let size = size_of::<T>();
         let (gpaddr, _, pg_size) = self.guest_pt.query(self.gvaddr)?;
+        Self::check_gpaddr(gpaddr)?;
         if page_offset(gpaddr) + size > pg_size as usize {
             return hv_result_err!(
                 EINVAL,
@@ -132,13 +129,12 @@ impl<T, P: Read> GuestPtr<'_, T, P> {
         let ptr = phys_to_virt(gpaddr) as *const _;
         unsafe { Ok(&*ptr) }
     }
-}
 
-impl<T, P: Write> GuestPtr<'_, T, P> {
     pub fn as_mut(&mut self) -> HvResult<&mut T> {
-        self.check()?;
+        self.check_ptr()?;
         let size = size_of::<T>();
         let (gpaddr, _, pg_size) = self.guest_pt.query(self.gvaddr)?;
+        Self::check_gpaddr(gpaddr)?;
         if page_offset(gpaddr) + size > pg_size as usize {
             return hv_result_err!(
                 EINVAL,
@@ -147,5 +143,12 @@ impl<T, P: Write> GuestPtr<'_, T, P> {
         }
         let ptr = phys_to_virt(gpaddr) as *mut _;
         unsafe { Ok(&mut *ptr) }
+    }
+
+    pub fn gpaddr_to_ref_mut(gpaddr: GuestPhysAddr) -> HvResult<&'static mut T> {
+        Self::check_raw(gpaddr)?;
+        Self::check_gpaddr(gpaddr)?;
+        let ptr = unsafe { &mut *(phys_to_virt(gpaddr) as *mut T) };
+        Ok(ptr)
     }
 }
