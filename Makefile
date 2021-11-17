@@ -11,8 +11,8 @@ OBJDUMP ?= objdump
 OBJCOPY ?= objcopy
 
 build_path := target/$(ARCH)/$(MODE)
-target_elf := $(build_path)/rvm15
-target_img := $(build_path)/jailhouse-$(VENDOR).bin
+target_elf := $(build_path)/rvm
+target_img := $(build_path)/rvm-$(VENDOR).bin
 
 features :=
 ifeq ($(ARCH), x86_64)
@@ -54,3 +54,9 @@ fmt:
 
 clean:
 	cargo clean
+
+scp:
+	scp -P 2333 -r $(target_img) ubuntu@localhost:/home/ubuntu
+
+ssh:
+	ssh -p 2333 ubuntu@localhost

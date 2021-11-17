@@ -131,7 +131,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rvm15"
+name = "rvm"
 version = "1.0.0"
 dependencies = [
  "bit_field 0.10.1",

@@ -18,4 +18,39 @@ Supported architectures: x86_64 (Intel VMX, AMD SVM).
 make [VENDOR=intel|amd] [LOG=warn|info|debug|trace]
 ```
 
-TODO...
+### Test in QEMU (ubuntu as the guest OS)
+
+1. Download the guest image and run in QEMU:
+
+    ```bash
+    cd scripts/host
+    make image          # download image and configure for the first time
+    make qemu           # execute this command only for subsequent runs
+    ```
+
+    You can login the guest OS via SSH. The default password is `guest`. The default port is `2333` and can be changed by QEMU arguments.
+
+2. Copy helpful scripts into the guest OS:
+
+    ```bash
+    scp -P 2333 scripts/guest/* ubuntu@localhost:/home/ubuntu
+    ```
+
+3. Setup in the guest OS:
+
+    ```bash
+    ssh -p 2333 ubuntu@localhost    # in host
+    ./setup.sh                      # in guest
+    ```
+
+4. Copy RVM image into the guest OS:
+
+    ```bash
+    make scp                        # in host
+    ```
+
+5. Enable RVM:
+
+    ```bash
+    ./enable-rvm.sh                 # in guest
+    ```
