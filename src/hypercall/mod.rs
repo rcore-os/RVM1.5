@@ -1,5 +1,5 @@
 use core::convert::TryFrom;
-use core::sync::atomic::{spin_loop_hint, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use bit_field::BitField;
 use numeric_enum_macro::numeric_enum;
@@ -90,7 +90,7 @@ impl<'a> HyperCall<'a> {
         static TRY_DISABLE_CPUS: AtomicUsize = AtomicUsize::new(0);
         TRY_DISABLE_CPUS.fetch_add(1, Ordering::SeqCst);
         while TRY_DISABLE_CPUS.load(Ordering::Acquire) < cpus {
-            spin_loop_hint();
+            core::hint::spin_loop();
         }
 
         self.cpu_data.deactivate_vmm(0)?;

@@ -21,13 +21,13 @@
 #![warn(missing_docs)]
 
 use bitflags::bitflags;
-use x86_64::instructions::port::Port;
-use core::{convert::TryInto, fmt};
+use core::fmt;
+use x86_64::instructions::port::{Port, PortReadOnly, PortWriteOnly};
 
 macro_rules! wait_for {
     ($cond:expr) => {
         while !$cond {
-            core::sync::atomic::spin_loop_hint()
+            core::hint::spin_loop()
         }
     };
 }
@@ -56,13 +56,12 @@ bitflags! {
 /// An interface to a serial port that allows sending out individual bytes.
 pub struct SerialPort {
     data: Port<u8>,
-    int_en: Port<u8>,
-    fifo_ctrl: Port<u8>,
-    line_ctrl: Port<u8>,
-    modem_ctrl: Port<u8>,
-    line_sts: Port<u8>,
+    int_en: PortWriteOnly<u8>,
+    fifo_ctrl: PortWriteOnly<u8>,
+    line_ctrl: PortWriteOnly<u8>,
+    modem_ctrl: PortWriteOnly<u8>,
+    line_sts: PortReadOnly<u8>,
 }
-
 
 struct BaudRateDivisor {
     least: u8,
@@ -179,46 +178,25 @@ impl BaudRate {
         let divisor =
             (BaudRate::OSC_FREQ / (self.speed() as usize * BaudRate::UART_CLOCK_FACTOR)) as u16;
         BaudRateDivisor {
-            least: (divisor & 0xff).try_into().unwrap(),
-            most: (divisor >> 8).try_into().unwrap(),
+            least: (divisor & 0xff) as u8,
+            most: (divisor >> 8) as u8,
         }
     }
 }
 
-
-
 impl SerialPort {
     /// Creates a new serial port interface on the given I/O port.
     ///
-    /// # Safety
-    ///
     /// This function is unsafe because the caller must ensure that the given base address
     /// really points to a serial port device.
-    #[cfg(feature = "nightly")]
     pub const unsafe fn new(base: u16) -> SerialPort {
         SerialPort {
             data: Port::new(base),
-            int_en: Port::new(base + 1),
-            fifo_ctrl: Port::new(base + 2),
-            line_ctrl: Port::new(base + 3),
-            modem_ctrl: Port::new(base + 4),
-            line_sts: Port::new(base + 5),
-        }
-    }
-
-    /// Creates a new serial port interface on the given I/O port.
-    ///
-    /// This function is unsafe because the caller must ensure that the given base address
-    /// really points to a serial port device.
-    #[cfg(not(feature = "nightly"))]
-    pub unsafe fn new(base: u16) -> SerialPort {
-        SerialPort {
-            data: Port::new(base),
-            int_en: Port::new(base + 1),
-            fifo_ctrl: Port::new(base + 2),
-            line_ctrl: Port::new(base + 3),
-            modem_ctrl: Port::new(base + 4),
-            line_sts: Port::new(base + 5),
+            int_en: PortWriteOnly::new(base + 1),
+            fifo_ctrl: PortWriteOnly::new(base + 2),
+            line_ctrl: PortWriteOnly::new(base + 3),
+            modem_ctrl: PortWriteOnly::new(base + 4),
+            line_sts: PortReadOnly::new(base + 5),
         }
     }
 
@@ -233,8 +211,8 @@ impl SerialPort {
             // Enable DLAB
             self.line_ctrl.write(0x80);
 
-            let divisor = baud_rate.uart_divisor();
             // Set maximum speed according the input baud rate by configuring DLL and DLM
+            let divisor = baud_rate.uart_divisor();
             self.data.write(divisor.least);
             self.int_en.write(divisor.most);
 

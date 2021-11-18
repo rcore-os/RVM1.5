@@ -1,6 +1,6 @@
 [package]
 name = "uart_16550"
-version = "0.2.10"
+version = "0.2.14"
 authors = ["Lachlan Sneff <lachlan.sneff@gmail.com>", "Philipp Oppermann <dev@phil-opp.com>"]
 description = "Minimal support for uart_16550 serial output."
 license = "MIT"
@@ -9,12 +9,12 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.1.0"
-x86_64 = { version = "0.12.2", default-features = false, features = ["instructions"] }
+x86_64 = { version = "0.14.0", default-features = false, features = ["instructions"] }
 
 [features]
 default = [ "nightly" ]
 stable = [ "x86_64/external_asm" ]
-nightly = [ "x86_64/nightly" ]
+nightly = [ "x86_64/inline_asm" ]
 
 [package.metadata.release]
 no-dev-version = true

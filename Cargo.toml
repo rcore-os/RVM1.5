@@ -26,5 +26,5 @@ bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator", rev =
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86 = "0.34"
-x86_64 = "0.12"
+x86_64 = "0.14"
 raw-cpuid = "8.1"

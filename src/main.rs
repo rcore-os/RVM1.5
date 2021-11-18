@@ -2,12 +2,11 @@
 #![cfg_attr(not(test), no_main)]
 #![cfg_attr(test, allow(dead_code))]
 #![feature(asm)]
-#![feature(const_fn)]
 #![feature(lang_items)]
 #![feature(global_asm)]
 #![feature(concat_idents)]
 #![feature(naked_functions)]
-#![allow(safe_packed_borrows)]
+#![allow(unaligned_references)]
 
 #[macro_use]
 extern crate alloc;
@@ -38,7 +37,7 @@ mod lang;
 #[path = "arch/x86_64/mod.rs"]
 mod arch;
 
-use core::sync::atomic::{spin_loop_hint, AtomicI32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 
 use config::HvSystemConfig;
 use error::HvResult;
@@ -57,7 +56,7 @@ fn has_err() -> bool {
 
 fn wait_for_other_completed(counter: &AtomicUsize, max_value: usize) -> HvResult {
     while !has_err() && counter.load(Ordering::Acquire) < max_value {
-        spin_loop_hint();
+        core::hint::spin_loop();
     }
     if has_err() {
         hv_result_err!(EBUSY, "Other cpu init failed!")

@@ -99,7 +99,7 @@ where
     /// Find and remove memory region which starts from `start`.
     pub fn delete(&mut self, start: PT::VA) -> HvResult {
         if let Entry::Occupied(e) = self.regions.entry(start) {
-            self.pt.unmap(&e.get())?;
+            self.pt.unmap(e.get())?;
             e.remove();
             Ok(())
         } else {
@@ -115,7 +115,7 @@ where
 
     pub fn clear(&mut self) {
         for region in self.regions.values() {
-            self.pt.unmap(&region).unwrap();
+            self.pt.unmap(region).unwrap();
         }
         self.regions.clear();
     }

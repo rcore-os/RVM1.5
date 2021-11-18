@@ -1,7 +1,7 @@
-use syn::parse::{Parse, ParseStream};
-use syn::{LitInt, LitStr, Token, Error, parse_macro_input, ItemEnum};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use syn::parse::{Parse, ParseStream};
+use syn::{parse_macro_input, Error, ItemEnum, LitInt, LitStr, Token};
 
 pub struct VmcsFieldArguments {
     pub width: u64,

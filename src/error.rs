@@ -3,8 +3,8 @@ use core::fmt::{Debug, Formatter, Result};
 
 /// POSIX errno
 #[repr(u32)]
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(dead_code, clippy::upper_case_acronyms)]
 pub enum HvErrorNum {
     EPERM = 1,
     ENOENT = 2,

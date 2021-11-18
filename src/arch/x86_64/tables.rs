@@ -1,6 +1,7 @@
 use spin::Mutex;
 use x86::{segmentation::SegmentSelector, task, Ring};
-use x86_64::instructions::tables::{lgdt, lidt};
+use x86_64::addr::VirtAddr;
+use x86_64::instructions::tables::{lgdt, lidt, sidt};
 use x86_64::structures::gdt::{Descriptor, DescriptorFlags};
 use x86_64::structures::idt::{Entry, HandlerFunc, InterruptDescriptorTable};
 use x86_64::structures::{tss::TaskStateSegment, DescriptorTablePointer};
@@ -37,13 +38,19 @@ impl GDTStruct {
         }
         Self {
             table,
-            pointer: DescriptorTablePointer { limit: 0, base: 0 },
+            pointer: DescriptorTablePointer {
+                limit: 0,
+                base: VirtAddr::new(0),
+            },
         }
     }
 
     pub fn sgdt() -> DescriptorTablePointer {
-        let mut gdt_ptr = DescriptorTablePointer { limit: 0, base: 0 };
-        unsafe { asm!("sgdt [{0}]", in(reg) &mut gdt_ptr) };
+        let mut gdt_ptr = DescriptorTablePointer {
+            limit: 0,
+            base: VirtAddr::new(0),
+        };
+        unsafe { asm!("sgdt [{0}]", in(reg) &mut gdt_ptr, options(nostack, preserves_flags)) };
         gdt_ptr
     }
 
@@ -53,13 +60,13 @@ impl GDTStruct {
 
     pub fn table_of(pointer: &DescriptorTablePointer) -> &[u64] {
         let entry_count = (pointer.limit as usize + 1) / core::mem::size_of::<u64>();
-        unsafe { core::slice::from_raw_parts(pointer.base as *const u64, entry_count) }
+        unsafe { core::slice::from_raw_parts(pointer.base.as_ptr(), entry_count) }
     }
 
     #[allow(clippy::mut_from_ref)]
     pub fn table_of_mut(pointer: &DescriptorTablePointer) -> &mut [u64] {
         let entry_count = (pointer.limit as usize + 1) / core::mem::size_of::<u64>();
-        unsafe { core::slice::from_raw_parts_mut(pointer.base as *mut u64, entry_count) }
+        unsafe { core::slice::from_raw_parts_mut(pointer.base.as_mut_ptr(), entry_count) }
     }
 
     pub fn pointer(&self) -> &DescriptorTablePointer {
@@ -68,14 +75,14 @@ impl GDTStruct {
 
     pub fn load(&mut self) {
         self.pointer = DescriptorTablePointer {
-            base: self.table.as_ptr() as _,
+            base: VirtAddr::new(self.table.as_ptr() as u64),
             limit: core::mem::size_of_val(&self.table) as u16 - 1,
         };
-        Self::lgdt(&self.pointer());
+        Self::lgdt(self.pointer());
     }
 
     pub fn load_tss(&mut self, selector: SegmentSelector) {
-        assert_ne!(self.pointer.base, 0);
+        assert_ne!(self.pointer.base.as_u64(), 0);
         SegmentAccessRights::set_descriptor_type(
             &mut Self::table_of_mut(&self.pointer)[selector.index() as usize],
             SegmentAccessRights::TSS_AVAIL,
@@ -98,7 +105,10 @@ impl IDTStruct {
 
         let mut ret = Self {
             table: InterruptDescriptorTable::new(),
-            pointer: DescriptorTablePointer { limit: 0, base: 0 },
+            pointer: DescriptorTablePointer {
+                limit: 0,
+                base: VirtAddr::new(0),
+            },
         };
         let entries = unsafe {
             core::slice::from_raw_parts_mut(
@@ -113,9 +123,7 @@ impl IDTStruct {
     }
 
     pub fn sidt() -> DescriptorTablePointer {
-        let mut idt_ptr = DescriptorTablePointer { limit: 0, base: 0 };
-        unsafe { asm!("sidt [{0}]", in(reg) &mut idt_ptr) };
-        idt_ptr
+        sidt()
     }
 
     pub fn lidt(pointer: &DescriptorTablePointer) {

@@ -4,6 +4,7 @@ use libvmm::msr::Msr;
 use libvmm::svm::flags::{InterruptType, VmcbCleanBits, VmcbIntInfo, VmcbTlbControl};
 use libvmm::svm::{vmcb::VmcbSegment, SvmExitCode, SvmIntercept, Vmcb};
 use x86::{segmentation, segmentation::SegmentSelector, task};
+use x86_64::addr::VirtAddr;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
 use x86_64::registers::model_specific::{Efer, EferFlags};
 use x86_64::registers::rflags::RFlags;
@@ -154,7 +155,7 @@ impl Vcpu {
 impl Vcpu {
     fn set_vmcb_dtr(vmcb_seg: &mut VmcbSegment, dtr: &DescriptorTablePointer) {
         vmcb_seg.limit = dtr.limit as u32 & 0xffff;
-        vmcb_seg.base = dtr.base;
+        vmcb_seg.base = dtr.base.as_u64();
     }
 
     fn set_vmcb_segment(vmcb_seg: &mut VmcbSegment, seg: &Segment) {
@@ -231,9 +232,9 @@ impl Vcpu {
         linux.ds.selector = SegmentSelector::from_raw(vmcb.ds.selector);
         linux.es.selector = SegmentSelector::from_raw(vmcb.es.selector);
 
-        linux.gdt.base = vmcb.gdtr.base;
+        linux.gdt.base = VirtAddr::new(vmcb.gdtr.base);
         linux.gdt.limit = vmcb.gdtr.limit as _;
-        linux.idt.base = vmcb.idtr.base;
+        linux.idt.base = VirtAddr::new(vmcb.idtr.base);
         linux.idt.limit = vmcb.idtr.limit as _;
 
         // We should load the following register state manually since we not use VMLOAD/VMSAVE

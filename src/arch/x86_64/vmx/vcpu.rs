@@ -10,6 +10,7 @@ use libvmm::vmx::{
     Vmcs, VmxExitReason,
 };
 use x86::segmentation::SegmentSelector;
+use x86_64::addr::VirtAddr;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Cr4, Cr4Flags};
 use x86_64::registers::rflags::RFlags;
 
@@ -202,8 +203,8 @@ impl Vcpu {
         VmcsField64Host::GS_BASE.write(Msr::IA32_GS_BASE.read())?;
         VmcsField64Host::TR_BASE.write(0)?;
 
-        VmcsField64Host::GDTR_BASE.write(GDT.lock().pointer().base)?;
-        VmcsField64Host::IDTR_BASE.write(IDT.lock().pointer().base)?;
+        VmcsField64Host::GDTR_BASE.write(GDT.lock().pointer().base.as_u64())?;
+        VmcsField64Host::IDTR_BASE.write(IDT.lock().pointer().base.as_u64())?;
 
         VmcsField64Host::IA32_SYSENTER_ESP.write(0)?;
         VmcsField64Host::IA32_SYSENTER_EIP.write(0)?;
@@ -238,9 +239,9 @@ impl Vcpu {
         set_guest_segment!(Segment::invalid(), SS);
         set_guest_segment!(Segment::invalid(), LDTR);
 
-        VmcsField64Guest::GDTR_BASE.write(linux.gdt.base)?;
+        VmcsField64Guest::GDTR_BASE.write(linux.gdt.base.as_u64())?;
         VmcsField32Guest::GDTR_LIMIT.write(linux.gdt.limit as _)?;
-        VmcsField64Guest::IDTR_BASE.write(linux.idt.base)?;
+        VmcsField64Guest::IDTR_BASE.write(linux.idt.base.as_u64())?;
         VmcsField32Guest::IDTR_LIMIT.write(linux.idt.limit as _)?;
 
         VmcsField64Guest::RSP.write(linux.rsp)?;
@@ -280,9 +281,9 @@ impl Vcpu {
         linux.gs.base = VmcsField64Guest::GS_BASE.read()?;
         linux.tss.selector = SegmentSelector::from_raw(VmcsField16Guest::TR_SELECTOR.read()?);
 
-        linux.gdt.base = VmcsField64Guest::GDTR_BASE.read()?;
+        linux.gdt.base = VirtAddr::new(VmcsField64Guest::GDTR_BASE.read()?);
         linux.gdt.limit = VmcsField32Guest::GDTR_LIMIT.read()? as _;
-        linux.idt.base = VmcsField64Guest::IDTR_BASE.read()?;
+        linux.idt.base = VirtAddr::new(VmcsField64Guest::IDTR_BASE.read()?);
         linux.idt.limit = VmcsField32Guest::IDTR_LIMIT.read()? as _;
 
         unsafe {

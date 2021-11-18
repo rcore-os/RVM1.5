@@ -1,5 +1,21 @@
 # Unreleased
 
+# 0.2.14 – 2021-05-14
+
+- `SerialPort::new()` no longer requires `nightly` feature ([#16](https://github.com/rust-osdev/uart_16550/pull/16))
+
+# 0.2.13 – 2021-04-30
+
+- Update x86_64 dependency and make it more robust ([#14](https://github.com/rust-osdev/uart_16550/pull/14))
+
+# 0.2.12 – 2021-02-02
+
+- Fix build on nightly by updating to x86_64 v0.13.2 ([#12](https://github.com/rust-osdev/uart_16550/pull/12))
+
+# 0.2.11 – 2021-01-15
+
+- Use stabilized `hint::spin_loop` instead of deprecated `atomic::spin_loop_hint`
+
 # 0.2.10 – 2020-10-01
 
 - Fix default feature breakage ([#11](https://github.com/rust-osdev/uart_16550/pull/11))
