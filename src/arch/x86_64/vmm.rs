@@ -105,17 +105,19 @@ impl VmExit<'_> {
             guest_regs.rbx = res.ebx as _;
             guest_regs.rcx = res.ecx as _;
             guest_regs.rdx = res.edx as _;
-            let mut flags = FeatureInfoFlags::from_bits_truncate(guest_regs.rcx as _);
             if function == CpuIdEax::FeatureInfo as _ {
+                let mut flags = FeatureInfoFlags::from_bits_truncate(guest_regs.rcx as _);
                 if cr4_flags.contains(Cr4Flags::OSXSAVE) {
                     flags.insert(FeatureInfoFlags::OSXSAVE);
                 }
                 flags.remove(FeatureInfoFlags::VMX);
                 flags.insert(FeatureInfoFlags::HYPERVISOR);
+                guest_regs.rcx = flags.bits();
             } else if function == CpuIdEax::AmdFeatureInfo as _ {
+                let mut flags = FeatureInfoFlags::from_bits_truncate(guest_regs.rcx as _);
                 flags.remove(FeatureInfoFlags::SVM);
+                guest_regs.rcx = flags.bits();
             }
-            guest_regs.rcx = flags.bits();
         }
         self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_CPUID)?;
         Ok(())
