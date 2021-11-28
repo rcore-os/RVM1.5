@@ -54,7 +54,7 @@ mod _stats {
     impl Instant {
         pub fn now() -> Self {
             Self {
-                timestamp: crate::arch::cpu::time_now(),
+                timestamp: crate::arch::cpu::current_cycle(),
             }
         }
 
