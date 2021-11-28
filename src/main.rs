@@ -123,7 +123,6 @@ fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
     } else {
         wait_for_other_completed(&INIT_EARLY_OK, 1)?;
     }
-
     cpu_data.init(cpu_id, linux_sp, &cell::ROOT_CELL)?;
     println!("CPU {} init OK.", cpu_id);
     INITED_CPUS.fetch_add(1, Ordering::SeqCst);

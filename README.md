@@ -4,7 +4,7 @@
 
 A Type-1.5 hypervisor written in Rust.
 
-Drived by the driver from [Jailhouse](https://github.com/siemens/jailhouse).
+Drived by the driver from [Jailhouse](https://github.com/DeathWish5/jailhouse).
 
 Supported architectures: x86_64 (Intel VMX, AMD SVM).
 

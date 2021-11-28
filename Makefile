@@ -79,7 +79,7 @@ clean:
 	cargo clean
 
 scp:
-	scp -P 2333 -r $(target_img) ubuntu@localhost:/home/ubuntu
+	scp -P 2335 -r $(target_img) ubuntu@192.168.50.55:~/rvm-intel-zyr.bin
 
 ssh:
-	ssh -p 2333 ubuntu@localhost
+	ssh -p 2335 ubuntu@localhost
