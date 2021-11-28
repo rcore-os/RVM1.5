@@ -78,8 +78,10 @@ fmt:
 clean:
 	cargo clean
 
+PORT := 2333
+
 scp:
-	scp -P 2335 -r $(target_img) ubuntu@192.168.50.55:~/rvm-intel-zyr.bin
+	scp -P $(PORT) -r $(target_img) ubuntu@192.168.50.55:~/rvm-intel.bin
 
 ssh:
-	ssh -p 2335 ubuntu@localhost
+	ssh -p $(PORT) ubuntu@localhost
