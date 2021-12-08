@@ -13,7 +13,7 @@ pub use x86::bits64::vmx::{vmxoff, vmxon};
 // see https://github.com/gz/rust-x86/pull/50.
 #[inline(always)]
 fn vmx_capture_status() -> Result<()> {
-    let flags = unsafe { rflags::read() };
+    let flags = rflags::read();
 
     if flags.contains(RFlags::FLAGS_ZF) {
         Err(VmFail::VmFailValid)

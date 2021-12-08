@@ -127,7 +127,7 @@ impl LinuxContext {
             es: Segment::from_selector(segmentation::es(), &gdt),
             fs,
             gs,
-            tss: Segment::from_selector(task::tr(), &gdt),
+            tss: Segment::from_selector(unsafe { task::tr() }, &gdt),
             gdt,
             idt: IDTStruct::sidt(),
             cr0: Cr0::read(),

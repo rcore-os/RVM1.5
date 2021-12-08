@@ -361,7 +361,7 @@ impl Vcpu {
         VmcsField64Control::CR4_GUEST_HOST_MASK.write(0)?;
         VmcsField32Control::CR3_TARGET_COUNT.write(0)?;
 
-        unsafe { cell.gpm.read().activate() }; // Set EPT_POINTER
+        unsafe { cell.gpm.activate() }; // Set EPT_POINTER
 
         VmcsField64Control::MSR_BITMAP.write(MSR_BITMAP.paddr() as _)?;
         VmcsField32Control::EXCEPTION_BITMAP.write(0)?;

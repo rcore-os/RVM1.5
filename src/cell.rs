@@ -1,8 +1,6 @@
-use spin::RwLock;
-
 use crate::arch::{HostPageTable, NestedPageTable};
 use crate::config::{CellConfig, HvSystemConfig};
-use crate::consts::{HV_BASE, PER_CPU_SIZE};
+use crate::consts::HV_BASE;
 use crate::error::HvResult;
 use crate::header::HvHeader;
 use crate::memory::addr::{phys_to_virt, GuestPhysAddr, HostPhysAddr};
@@ -13,9 +11,9 @@ pub struct Cell<'a> {
     /// Cell configuration.
     pub config: CellConfig<'a>,
     /// Guest physical memory set.
-    pub gpm: RwLock<MemorySet<NestedPageTable>>,
+    pub gpm: MemorySet<NestedPageTable>,
     /// Host virtual memory set.
-    pub hvm: RwLock<MemorySet<HostPageTable>>,
+    pub hvm: MemorySet<HostPageTable>,
 }
 
 impl Cell<'_> {
@@ -47,21 +45,19 @@ impl Cell<'_> {
             ))?;
         }
 
-        // Init host virtual memory set, create host page table.
-        let core_and_percpu_size =
-            header.core_size as usize + header.max_cpus as usize * PER_CPU_SIZE;
         // hypervisor core
+        // TODO: Fine-grained permissions setting
         hvm.insert(MemoryRegion::new_with_offset_mapper(
             HV_BASE,
             hv_phys_start,
             header.core_size,
             MemFlags::READ | MemFlags::WRITE | MemFlags::EXECUTE,
         ))?;
-        // configurations & hypervisor free memory
+        // per-CPU data, configurations & page pool
         hvm.insert(MemoryRegion::new_with_offset_mapper(
-            HV_BASE + core_and_percpu_size,
-            hv_phys_start + core_and_percpu_size,
-            hv_phys_size - core_and_percpu_size,
+            HV_BASE + header.core_size,
+            hv_phys_start + header.core_size,
+            hv_phys_size - header.core_size,
             MemFlags::READ | MemFlags::WRITE,
         ))?;
         // to directly access all guest RAM
@@ -85,11 +81,13 @@ impl Cell<'_> {
                 ))?;
             }
         }
+        trace!("Guest phyiscal memory set: {:#x?}", gpm);
+        trace!("Hypervisor virtual memory set: {:#x?}", hvm);
 
         Ok(Self {
             config: cell_config,
-            gpm: RwLock::new(gpm),
-            hvm: RwLock::new(hvm),
+            gpm,
+            hvm,
         })
     }
 }

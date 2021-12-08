@@ -188,7 +188,7 @@ impl CpuFeatures {
     }
 
     pub fn has_rdtscp(&self) -> bool {
-        if let Some(info) = self.cpuid.get_extended_function_info() {
+        if let Some(info) = self.cpuid.get_extended_processor_and_feature_identifiers() {
             info.has_rdtscp()
         } else {
             false

@@ -204,7 +204,7 @@ impl Vcpu {
         vmcb.np_enable = 1;
         vmcb.guest_asid = 1; // No more than one guest owns the CPU
         vmcb.clean_bits = VmcbCleanBits::empty(); // Explicitly mark all of the state as new
-        vmcb.nest_cr3 = cell.gpm.read().page_table().root_paddr() as _;
+        vmcb.nest_cr3 = cell.gpm.page_table().root_paddr() as _;
         vmcb.tlb_control = VmcbTlbControl::FlushAsid as _;
 
         self.vmcb.set_intercept(SvmIntercept::NMI);
@@ -240,7 +240,7 @@ impl Vcpu {
         // We should load the following register state manually since we not use VMLOAD/VMSAVE
         linux.fs.selector = segmentation::fs();
         linux.gs.selector = segmentation::gs();
-        linux.tss.selector = task::tr();
+        linux.tss.selector = unsafe { task::tr() };
         linux.fs.base = Msr::IA32_FS_BASE.read();
         linux.gs.base = Msr::IA32_GS_BASE.read();
     }

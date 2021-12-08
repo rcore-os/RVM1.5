@@ -9,7 +9,7 @@ use crate::consts::{HV_STACK_SIZE, LOCAL_PER_CPU_BASE};
 use crate::error::HvResult;
 use crate::ffi::PER_CPU_ARRAY_PTR;
 use crate::header::HvHeader;
-use crate::memory::{addr::virt_to_phys, GenericPageTable, MemFlags, MemoryRegion, MemorySet};
+use crate::memory::{addr::virt_to_phys, MemFlags, MemoryRegion, MemorySet};
 
 pub const PER_CPU_SIZE: usize = size_of::<PerCpu>();
 
@@ -71,23 +71,15 @@ impl PerCpu {
         self.state = CpuState::HvDisabled;
         self.linux = LinuxContext::load_from(linux_sp);
 
-        let mut hvm = cell.hvm.read().clone();
+        let mut hvm = cell.hvm.clone();
         let vaddr = self as *const _ as usize;
         let paddr = virt_to_phys(vaddr);
-        // Temporary mapping, will remove in Self::activate_vmm()
-        hvm.insert(MemoryRegion::new_with_offset_mapper(
-            vaddr,
-            paddr,
-            PER_CPU_SIZE,
-            MemFlags::READ | MemFlags::WRITE,
-        ))?;
         hvm.insert(MemoryRegion::new_with_offset_mapper(
             LOCAL_PER_CPU_BASE,
             paddr,
             PER_CPU_SIZE,
             MemFlags::READ | MemFlags::WRITE,
         ))?;
-        trace!("PerCpu host virtual memory set: {:#x?}", hvm);
         unsafe {
             // avoid dropping, same below
             core::ptr::write(&mut self.hvm, hvm);
@@ -97,12 +89,6 @@ impl PerCpu {
 
         self.state = CpuState::HvEnabled;
         Ok(())
-    }
-
-    #[inline(never)]
-    fn activate_vmm_local(&mut self) -> HvResult {
-        self.vcpu.activate_vmm(&self.linux)?;
-        unreachable!()
     }
 
     #[inline(never)]
@@ -118,13 +104,8 @@ impl PerCpu {
         println!("Activating hypervisor on CPU {}...", self.cpu_id);
         ACTIVATED_CPUS.fetch_add(1, Ordering::SeqCst);
 
-        let local_cpu_data = Self::from_local_base_mut();
-        let old_percpu_vaddr = self as *const _ as usize;
-        // Switch stack to the private mapping.
-        unsafe { asm!("add rsp, {}", in(reg) LOCAL_PER_CPU_BASE - old_percpu_vaddr) };
-        local_cpu_data.hvm.delete(old_percpu_vaddr)?;
-        local_cpu_data.hvm.page_table().flush(None);
-        local_cpu_data.activate_vmm_local()
+        self.vcpu.activate_vmm(&self.linux)?;
+        unreachable!()
     }
 
     pub fn deactivate_vmm(&mut self, ret_code: usize) -> HvResult {
@@ -137,15 +118,6 @@ impl PerCpu {
         // back to the common stack mapping and to Linux page tables.
         let common_cpu_data = Self::from_id_mut(self.cpu_id);
         let common_percpu_vaddr = common_cpu_data as *const _ as usize;
-
-        let paddr = virt_to_phys(common_percpu_vaddr);
-        self.hvm.insert(MemoryRegion::new_with_offset_mapper(
-            common_percpu_vaddr,
-            paddr,
-            PER_CPU_SIZE,
-            MemFlags::READ | MemFlags::WRITE,
-        ))?;
-        self.hvm.page_table().flush(None);
         unsafe { asm!("add rsp, {}", in(reg) common_percpu_vaddr - LOCAL_PER_CPU_BASE) };
         common_cpu_data.deactivate_vmm_common()
     }
