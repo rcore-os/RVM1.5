@@ -17,7 +17,7 @@ pub fn init() {
 
 #[allow(dead_code)]
 pub fn print(args: fmt::Arguments) {
-    crate::arch::io::putfmt(args);
+    crate::arch::serial::putfmt(args);
 }
 
 #[cfg(not(test))]

@@ -1,16 +1,15 @@
-#[cfg(feature = "vmx")]
-#[path = "vmx/mod.rs"]
+#[cfg(feature = "intel")]
+#[path = "intel/mod.rs"]
 mod vendor;
 
-#[cfg(feature = "svm")]
-#[path = "svm/mod.rs"]
+#[cfg(feature = "amd")]
+#[path = "amd/mod.rs"]
 mod vendor;
 
 use x86_64::registers::control::{Cr0Flags, Cr4Flags};
 
 use super::GuestRegisters;
-use crate::error::HvResult;
-use crate::percpu::PerCpu;
+use crate::{error::HvResult, percpu::PerCpu};
 
 pub use vendor::{check_hypervisor_feature, NestedPageTable, Vcpu};
 

@@ -65,7 +65,7 @@ impl SegmentAccessRights {
         desc.set_bits(40..44, type_field.bits() as u64);
     }
 
-    #[cfg(feature = "svm")]
+    #[cfg(feature = "amd")]
     pub fn as_svm_segment_attributes(&self) -> u16 {
         let bits = self.bits() as u16;
         (bits & 0xff) | ((bits & 0xf000) >> 4)

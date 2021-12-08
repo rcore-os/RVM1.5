@@ -8,8 +8,8 @@ description = "A Type-1.5 hypervisor written in Rust."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-vmx = ["libvmm/vmx"]
-svm = ["libvmm/svm"]
+intel = ["libvmm/vmx"]
+amd = ["libvmm/svm"]
 stats = []
 
 [dependencies]

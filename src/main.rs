@@ -70,7 +70,7 @@ fn primary_init_early() -> HvResult {
     info!("Primary CPU init early...");
 
     let system_config = HvSystemConfig::get();
-    let sign = core::str::from_utf8(&system_config.signature).unwrap();
+    let sign = core::str::from_utf8(&system_config.signature);
     println!(
         "\n\
         Initializing hypervisor...\n\

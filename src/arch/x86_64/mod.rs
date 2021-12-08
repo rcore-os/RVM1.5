@@ -1,13 +1,14 @@
 #[macro_use]
 mod context;
-pub mod cpu;
 mod cpuid;
 mod entry;
 mod exception;
-pub mod io;
 mod page_table;
 mod segmentation;
 mod tables;
+
+pub mod cpu;
+pub mod serial;
 pub mod vmm;
 
 pub use context::{GuestRegisters, LinuxContext};

@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "svm", allow(dead_code))]
+#![cfg_attr(not(feature = "intel"), allow(dead_code))]
 
 use bitflags::bitflags;
 

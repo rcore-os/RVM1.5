@@ -6,7 +6,7 @@
 #   make disasm                 Open the disassemble file of the last build
 #   make clean                  Clean
 #
-# Options:
+# Arguments:
 #   LOG  = off | error | warn | info | debug | trace
 #   ARCH = x86_64
 #   VENDOR = intel | amd        [ x86_64 only ] Build for Intel or AMD CPUs.
@@ -16,6 +16,7 @@ ARCH ?= x86_64
 VENDOR ?= intel
 LOG ?=
 STATS ?= off
+PORT ?= 2333
 
 # do not support debug mode
 MODE := release
@@ -31,55 +32,58 @@ OBJCOPY ?= objcopy
 
 build_path := target/$(ARCH)/$(MODE)
 target_elf := $(build_path)/rvm
-target_img := $(build_path)/rvm-$(VENDOR).bin
+target_bin := $(build_path)/rvm-$(VENDOR).bin
 
-features :=
 ifeq ($(ARCH), x86_64)
-ifeq ($(VENDOR), intel)
-features += --features vmx
-else ifeq ($(VENDOR), amd)
-features += --features svm
+  features := $(VENDOR)
 else
-$(error VENDOR must be either "intel" or "amd" for x86_64 architecture)
-endif
+  features :=
 endif
 
 ifeq ($(STATS), on)
-features += --features stats
+  features += --features stats
 endif
 
-build_args := $(features) --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
+build_args := --features "$(features)" --target $(ARCH).json -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
+
 ifeq ($(MODE), release)
-build_args += --release
+  build_args += --release
 endif
 
-.PHONY: build elf hexdump clippy fmt clean
+.PHONY: all
+all: $(target_bin)
 
-build: $(target_img)
-
+.PHONY: elf
 elf:
 	cargo build $(build_args)
 
-$(target_img): elf
+$(target_bin): elf
 	$(OBJCOPY) $(target_elf) --strip-all -O binary $@
 
+.PHONY: disasm
 disasm:
 	$(OBJDUMP) -d $(target_elf) -M intel | less
 
+.PHONY: clippy
 clippy:
 	cargo clippy $(build_args)
 
+.PHONY: test
 test:
-	cargo test $(features) --release -- --nocapture
+	cargo test --features $(features) --release -- --nocapture
 
+.PHONY: fmt
 fmt:
 	cargo fmt
 
+.PHONY: clean
 clean:
 	cargo clean
 
+.PHONY: scp
 scp:
-	scp -P 2333 -r $(target_img) ubuntu@localhost:/home/ubuntu
+	scp -P $(PORT) -r $(target_bin) ubuntu@localhost:/home/ubuntu
 
+.PHONY: ssh
 ssh:
-	ssh -p 2333 ubuntu@localhost
+	ssh -p $(PORT) ubuntu@localhost
