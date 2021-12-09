@@ -111,15 +111,7 @@ impl Vcpu {
         Ok(ret)
     }
 
-    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
-        self.load_vmcs_guest(linux)?;
-        Vmcs::clear(self.vmcs_region.paddr())?;
-        unsafe { vmx::vmxoff()? };
-        info!("successed to turn off VMX.");
-        Ok(())
-    }
-
-    pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
+    pub fn enter(&mut self, linux: &LinuxContext) -> HvResult {
         let regs = self.regs_mut();
         regs.rax = 0;
         regs.rbx = linux.rbx;
@@ -144,8 +136,12 @@ impl Vcpu {
         hv_result_err!(EIO)
     }
 
-    pub fn deactivate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        self.guest_regs.return_to_linux(linux)
+    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
+        self.load_vmcs_guest(linux)?;
+        Vmcs::clear(self.vmcs_region.paddr())?;
+        unsafe { vmx::vmxoff()? };
+        info!("successed to turn off VMX.");
+        Ok(())
     }
 
     pub fn inject_fault(&mut self) -> HvResult {

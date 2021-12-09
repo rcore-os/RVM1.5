@@ -78,19 +78,8 @@ impl Vcpu {
         Ok(ret)
     }
 
-    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
-        self.load_vmcb_guest(linux);
-        unsafe {
-            asm!("stgi");
-            Efer::write(Efer::read() - EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE);
-            Msr::VM_HSAVE_PA.write(0);
-        }
-        info!("successed to turn off SVM.");
-        Ok(())
-    }
-
-    pub fn activate_vmm(&mut self, linux: &LinuxContext) -> HvResult {
-        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().cpu_id);
+    pub fn enter(&mut self, linux: &LinuxContext) -> HvResult {
+        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().id);
         let vmcb_paddr = virt_to_phys(&common_cpu_data.vcpu.vmcb as *const _ as usize);
         let regs = self.regs_mut();
         regs.rax = vmcb_paddr as _;
@@ -114,8 +103,15 @@ impl Vcpu {
         }
     }
 
-    pub fn deactivate_vmm(&self, linux: &LinuxContext) -> HvResult {
-        self.guest_regs.return_to_linux(linux)
+    pub fn exit(&self, linux: &mut LinuxContext) -> HvResult {
+        self.load_vmcb_guest(linux);
+        unsafe {
+            asm!("stgi");
+            Efer::write(Efer::read() - EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE);
+            Msr::VM_HSAVE_PA.write(0);
+        }
+        info!("successed to turn off SVM.");
+        Ok(())
     }
 
     pub fn inject_fault(&mut self) -> HvResult {

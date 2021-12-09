@@ -23,7 +23,8 @@ pub enum CpuState {
 
 #[repr(align(4096))]
 pub struct PerCpu {
-    pub cpu_id: usize,
+    pub id: usize,
+    pub phys_id: usize,
     pub state: CpuState,
     pub vcpu: Vcpu,
     stack: [usize; HV_STACK_SIZE / size_of::<usize>()],
@@ -67,9 +68,11 @@ impl PerCpu {
     pub fn init(&mut self, cpu_id: usize, linux_sp: usize, cell: &Cell) -> HvResult {
         info!("CPU {} init...", cpu_id);
 
-        self.cpu_id = cpu_id;
+        self.id = cpu_id;
+        self.phys_id = crate::arch::cpu::phys_id();
         self.state = CpuState::HvDisabled;
         self.linux = LinuxContext::load_from(linux_sp);
+        crate::arch::cpu::init();
 
         let mut hvm = cell.hvm.clone();
         let vaddr = self as *const _ as usize;
@@ -96,27 +99,26 @@ impl PerCpu {
         self.vcpu.exit(&mut self.linux)?;
         self.linux.restore();
         self.state = CpuState::HvDisabled;
-        self.vcpu.deactivate_vmm(&self.linux)?;
-        unreachable!()
+        self.linux.return_to_linux(self.vcpu.regs());
     }
 
     pub fn activate_vmm(&mut self) -> HvResult {
-        println!("Activating hypervisor on CPU {}...", self.cpu_id);
+        println!("Activating hypervisor on CPU {}...", self.id);
         ACTIVATED_CPUS.fetch_add(1, Ordering::SeqCst);
 
-        self.vcpu.activate_vmm(&self.linux)?;
+        self.vcpu.enter(&self.linux)?;
         unreachable!()
     }
 
     pub fn deactivate_vmm(&mut self, ret_code: usize) -> HvResult {
-        println!("Deactivating hypervisor on CPU {}...", self.cpu_id);
+        println!("Deactivating hypervisor on CPU {}...", self.id);
         ACTIVATED_CPUS.fetch_add(-1, Ordering::SeqCst);
 
         self.vcpu.set_return_val(ret_code);
 
         // Restore full per_cpu region access so that we can switch
         // back to the common stack mapping and to Linux page tables.
-        let common_cpu_data = Self::from_id_mut(self.cpu_id);
+        let common_cpu_data = Self::from_id_mut(self.id);
         let common_percpu_vaddr = common_cpu_data as *const _ as usize;
         unsafe { asm!("add rsp, {}", in(reg) common_percpu_vaddr - LOCAL_PER_CPU_BASE) };
         common_cpu_data.deactivate_vmm_common()
@@ -132,7 +134,8 @@ impl PerCpu {
 impl Debug for PerCpu {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let mut res = f.debug_struct("PerCpu");
-        res.field("cpu_id", &self.cpu_id)
+        res.field("id", &self.id)
+            .field("phys_id", &self.phys_id)
             .field("state", &self.state);
         if self.state != CpuState::HvDisabled {
             res.field("vcpu", &self.vcpu);

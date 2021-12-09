@@ -2,9 +2,13 @@ use core::fmt::{Debug, Formatter, Result};
 use core::{mem::size_of, slice};
 
 use crate::consts::HV_BASE;
+use crate::error::HvResult;
 use crate::header::HvHeader;
 use crate::memory::MemFlags;
 use crate::percpu::PER_CPU_SIZE;
+
+const CONFIG_SIGNATURE: [u8; 6] = *b"RVMSYS";
+const CONFIG_REVISION: u16 = 10;
 
 const HV_CELL_NAME_MAXLEN: usize = 31;
 const HV_MAX_IOMMU_UNITS: usize = 8;
@@ -204,6 +208,16 @@ impl HvSystemConfig {
     pub const fn size(&self) -> usize {
         size_of::<Self>() + self.root_cell.config_size()
     }
+
+    pub fn check(&self) -> HvResult {
+        if self.signature != CONFIG_SIGNATURE {
+            return hv_result_err!(EINVAL, "HvSystemConfig signature not matched!");
+        }
+        if self.revision != CONFIG_REVISION {
+            return hv_result_err!(EINVAL, "HvSystemConfig revision not matched!");
+        }
+        Ok(())
+    }
 }
 
 impl<'a> CellConfig<'a> {
@@ -231,54 +245,19 @@ impl<'a> CellConfig<'a> {
             slice::from_raw_parts(ptr, self.desc.num_memory_regions as usize)
         }
     }
-
-    pub fn cache_regions(&self) -> &[HvCacheRegion] {
-        unsafe {
-            let ptr = self.mem_regions().as_ptr_range().end as _;
-            slice::from_raw_parts(ptr, self.desc.num_cache_regions as usize)
-        }
-    }
-
-    pub fn irqchips(&self) -> &[HvIrqChip] {
-        unsafe {
-            let ptr = self.cache_regions().as_ptr_range().end as _;
-            slice::from_raw_parts(ptr, self.desc.num_irqchips as usize)
-        }
-    }
-
-    pub fn pio_bitmap(&self) -> &[u8] {
-        unsafe {
-            let ptr = self.irqchips().as_ptr_range().end as _;
-            slice::from_raw_parts(ptr, self.desc.pio_bitmap_size as usize)
-        }
-    }
-
-    pub fn pci_devices(&self) -> &[HvPciDevice] {
-        unsafe {
-            let ptr = self.pio_bitmap().as_ptr_range().end as _;
-            slice::from_raw_parts(ptr, self.desc.num_pci_devices as usize)
-        }
-    }
-
-    pub fn pci_caps(&self) -> &[HvPciCapability] {
-        unsafe {
-            let ptr = self.pci_devices().as_ptr_range().end as _;
-            slice::from_raw_parts(ptr, self.desc.num_pci_caps as usize)
-        }
-    }
 }
 
 impl Debug for CellConfig<'_> {
     fn fmt(&self, f: &mut Formatter) -> Result {
+        let name = self.desc.name;
+        let mut len = 0;
+        while name[len] != 0 {
+            len += 1;
+        }
         f.debug_struct("CellConfig")
+            .field("name", &core::str::from_utf8(&name[..len]))
             .field("size", &self.size())
-            .field("cpu_set", &self.cpu_set())
             .field("mem_regions", &self.mem_regions())
-            .field("cache_regions", &self.cache_regions())
-            .field("irqchips", &self.irqchips())
-            .field("pio_bitmap_size", &self.desc.pio_bitmap_size) // bitmap is too large for printing
-            .field("pci_devices", &self.pci_devices())
-            .field("pci_caps", &self.pci_caps())
             .finish()
     }
 }

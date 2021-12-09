@@ -114,7 +114,7 @@ index fe752753..319158fb 100644
  	RESOLVE_EXTERNAL_SYMBOL(__boot_cpu_mode);
 diff --git a/gen-config.sh b/gen-config.sh
 new file mode 100755
-index 00000000..4e6d273a
+index 00000000..6f9dc246
 --- /dev/null
 +++ b/gen-config.sh
 @@ -0,0 +1,12 @@
@@ -124,7 +124,7 @@ index 00000000..4e6d273a
 +echo "Created config file at './configs/x86/qemu-ubuntu.c'"
 +
 +# Extract kernel command line
-+cmdline=$(cat ./configs/x86/qemu-ubuntu.c | grep memmap | tr -d " \*" | sed 's/\$/\\\\\\\$/g')
++cmdline=$(cat ./configs/x86/qemu-ubuntu.c | grep memmap | tr -d " \*" | sed 's/\$/\\\\\\\\\\$/g')
 +
 +# Update grub config
 +cmdline=$(echo $cmdline | sed 's/\\/\\\\/g')
@@ -141,6 +141,41 @@ index 020af029..92ee115c 100644
 -#define JAILHOUSE_BASE			__JH_CONST_UL(0xfffffffff0000000)
 +#define JAILHOUSE_BASE			__JH_CONST_UL(0xffffff0000000000)
  #define JAILHOUSE_BORROW_ROOT_PT	1
+diff --git a/hypervisor/include/jailhouse/header.h b/hypervisor/include/jailhouse/header.h
+index 518bc5cb..5fddda56 100644
+--- a/hypervisor/include/jailhouse/header.h
++++ b/hypervisor/include/jailhouse/header.h
+@@ -12,7 +12,7 @@
+
+ #include <asm/jailhouse_header.h>
+
+-#define JAILHOUSE_SIGNATURE	"JAILHOUS"
++#define JAILHOUSE_SIGNATURE	"RVMIMAGE"
+
+ #define HYP_STUB_ABI_LEGACY 0
+ #define HYP_STUB_ABI_OPCODE 1
+diff --git a/include/jailhouse/cell-config.h b/include/jailhouse/cell-config.h
+index 66e13c3d..51c8531c 100644
+--- a/include/jailhouse/cell-config.h
++++ b/include/jailhouse/cell-config.h
+@@ -67,7 +67,7 @@
+ #define CELL_FLAGS_VIRTUAL_CONSOLE_PERMITTED(flags) \
+ 	!!((flags) & JAILHOUSE_CELL_VIRTUAL_CONSOLE_PERMITTED)
+
+-#define JAILHOUSE_CELL_DESC_SIGNATURE	"JHCELL"
++#define JAILHOUSE_CELL_DESC_SIGNATURE	"RVMCEL"
+
+ /**
+  * The jailhouse cell configuration.
+@@ -200,7 +200,7 @@ struct jailhouse_iommu {
+ 	__u32 amd_features;
+ } __attribute__((packed));
+
+-#define JAILHOUSE_SYSTEM_SIGNATURE	"JHSYST"
++#define JAILHOUSE_SYSTEM_SIGNATURE	"RVMSYS"
+
+ /*
+  * The flag JAILHOUSE_SYS_VIRTUAL_DEBUG_CONSOLE allows the root cell to read
 diff --git a/pyjailhouse/sysfs_parser.py b/pyjailhouse/sysfs_parser.py
 index c4154736..441d722c 100644
 --- a/pyjailhouse/sysfs_parser.py
@@ -237,3 +272,17 @@ index 6673f46c..6b8a0227 100755
 +    print(r)
 
  cpucount = count_cpus()
+
+diff --git a/tools/root-cell-config.c.tmpl b/tools/root-cell-config.c.tmpl
+index 5a8e1412..9b016c80 100644
+--- a/tools/root-cell-config.c.tmpl
++++ b/tools/root-cell-config.c.tmpl
+@@ -56,7 +56,7 @@ struct {
+ 	.header = {
+ 		.signature = JAILHOUSE_SYSTEM_SIGNATURE,
+ 		.revision = JAILHOUSE_CONFIG_REVISION,
+-		.flags = JAILHOUSE_SYS_VIRTUAL_DEBUG_CONSOLE,
++		.flags = 0,
+ 		.hypervisor_memory = {
+ 			.phys_start = ${hex(hvmem[0])},
+ 			.size = ${hex(hvmem[1])},

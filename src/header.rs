@@ -1,8 +1,11 @@
+use core::fmt::{Debug, Formatter, Result};
+
 use crate::ffi::HEADER_PTR;
 use crate::percpu::PER_CPU_SIZE;
 
+const HEADER_SIGNATURE: [u8; 8] = *b"RVMIMAGE";
+
 #[repr(C)]
-#[derive(Debug)]
 pub struct HvHeader {
     pub signature: [u8; 8],
     pub core_size: usize,
@@ -46,7 +49,7 @@ extern "C" {
 #[used]
 #[link_section = ".header"]
 static HEADER_STUFF: HvHeaderStuff = HvHeaderStuff {
-    signature: *b"JAILHOUS",
+    signature: HEADER_SIGNATURE,
     core_size: __core_size,
     percpu_size: PER_CPU_SIZE,
     entry: __entry_offset,
@@ -58,3 +61,16 @@ static HEADER_STUFF: HvHeaderStuff = HvHeaderStuff {
     arm_linux_hyp_vectors: 0,
     arm_linux_hyp_abi: 0,
 };
+
+impl Debug for HvHeader {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        f.debug_struct("HvHeader")
+            .field("signature", &core::str::from_utf8(&self.signature))
+            .field("core_size", &self.core_size)
+            .field("percpu_size", &self.percpu_size)
+            .field("entry", &self.entry)
+            .field("max_cpus", &self.max_cpus)
+            .field("online_cpus", &self.online_cpus)
+            .finish()
+    }
+}

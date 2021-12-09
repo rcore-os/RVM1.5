@@ -70,19 +70,18 @@ fn primary_init_early() -> HvResult {
     info!("Primary CPU init early...");
 
     let system_config = HvSystemConfig::get();
-    let sign = core::str::from_utf8(&system_config.signature);
     println!(
         "\n\
         Initializing hypervisor...\n\
-        signature = {:?}\n\
-        revision = {}\n\
+        config_signature = {:?}\n\
+        config_revision = {}\n\
         build_mode = {}\n\
         log_level = {}\n\
         arch = {}\n\
         vendor = {}\n\
         stats = {}\n\
         ",
-        sign,
+        core::str::from_utf8(&system_config.signature),
         system_config.revision,
         option_env!("MODE").unwrap_or(""),
         option_env!("LOG").unwrap_or(""),
@@ -91,10 +90,12 @@ fn primary_init_early() -> HvResult {
         option_env!("STATS").unwrap_or("off"),
     );
 
+    memory::init();
+
+    system_config.check()?;
     info!("Hypervisor header: {:#x?}", HvHeader::get());
     debug!("System config: {:#x?}", system_config);
 
-    memory::init();
     cell::init()?;
 
     INIT_EARLY_OK.store(1, Ordering::Release);

@@ -12,19 +12,16 @@ SECTIONS
 	}
 
 	. = ALIGN(4K);
-	.bss		: { *(.bss .bss.*) *(COMMON) }
-
-	. = ALIGN(16);
 	.text		: { *(.text .text.*) }
 
-	. = ALIGN(16);
+	. = ALIGN(4K);
 	.rodata		: { *(.rodata .rodata.*) }
 
-	. = ALIGN(16);
-	.data		: { *(.data .data.*) }
+	. = ALIGN(4K);
+	.data		: { *(.data .data.*) *(.got .got.*) }
 
 	. = ALIGN(4K);
-	.got		: { *(.got .got.*) }
+	.bss		: { *(.bss .bss.*) *(COMMON) }
 
 	. = ALIGN(4K);
 	__core_end = .;

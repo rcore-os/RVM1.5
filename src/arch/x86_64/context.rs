@@ -1,10 +1,10 @@
 use libvmm::msr::Msr;
-use x86::{segmentation, segmentation::SegmentSelector, task};
+use x86::{segmentation, task};
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags};
 use x86_64::{addr::PhysAddr, structures::paging::PhysFrame, structures::DescriptorTablePointer};
 
 use super::segmentation::Segment;
-use super::tables::{GDTStruct, IDTStruct, GDT, IDT};
+use super::tables::{GDTStruct, IDTStruct, GDT};
 
 const SAVED_LINUX_REGS: usize = 7;
 
@@ -105,6 +105,7 @@ macro_rules! restore_regs_from_stack {
 }
 
 impl LinuxContext {
+    /// Load linux callee-saved registers from the stack, and other system registers.
     pub fn load_from(linux_sp: usize) -> Self {
         let regs = unsafe { core::slice::from_raw_parts(linux_sp as *const u64, SAVED_LINUX_REGS) };
         let gdt = GDTStruct::sgdt();
@@ -113,7 +114,7 @@ impl LinuxContext {
         fs.base = Msr::IA32_FS_BASE.read();
         gs.base = Msr::IA32_GS_BASE.read();
 
-        let ret = Self {
+        Self {
             rsp: regs.as_ptr_range().end as _,
             r15: regs[0],
             r14: regs[1],
@@ -137,25 +138,10 @@ impl LinuxContext {
             lstar: Msr::IA32_LSTAR.read(),
             pat: Msr::IA32_PAT.read(),
             mtrr_def_type: Msr::IA32_MTRR_DEF_TYPE.read(),
-        };
-
-        // Setup new GDT, IDT, CS, TSS
-        GDT.lock().load();
-        unsafe {
-            segmentation::load_cs(GDTStruct::KCODE_SELECTOR);
-            segmentation::load_ds(SegmentSelector::from_raw(0));
-            segmentation::load_es(SegmentSelector::from_raw(0));
-            segmentation::load_ss(SegmentSelector::from_raw(0));
         }
-        IDT.lock().load();
-        GDT.lock().load_tss(GDTStruct::TSS_SELECTOR);
-
-        // PAT0: WB, PAT1: WC, PAT2: UC
-        unsafe { Msr::IA32_PAT.write(0x070106) };
-
-        ret
     }
 
+    /// Restore system registers.
     pub fn restore(&self) {
         unsafe {
             Msr::IA32_PAT.write(self.pat);
@@ -194,10 +180,9 @@ impl LinuxContext {
             Msr::IA32_GS_BASE.write(self.gs.base);
         }
     }
-}
 
-impl GuestRegisters {
-    pub fn return_to_linux(&self, linux: &LinuxContext) -> ! {
+    /// Restore linux general-purpose registers and stack, then return back to linux.
+    pub fn return_to_linux(&self, guest_regs: &GuestRegisters) -> ! {
         unsafe {
             asm!(
                 "mov rsp, {linux_rsp}",
@@ -208,10 +193,10 @@ impl GuestRegisters {
                 restore_regs_from_stack!(),
                 "pop rsp",
                 "ret",
-                linux_rsp = in(reg) linux.rsp,
-                linux_rip = in(reg) linux.rip,
-                guest_regs = in(reg) self,
-                guest_regs_size = const core::mem::size_of::<Self>(),
+                linux_rsp = in(reg) self.rsp,
+                linux_rip = in(reg) self.rip,
+                guest_regs = in(reg) guest_regs,
+                guest_regs_size = const core::mem::size_of::<GuestRegisters>(),
                 options(noreturn),
             );
         }

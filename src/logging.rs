@@ -75,7 +75,7 @@ impl Log for SimpleLogger {
         }
 
         let time_micros = crate::arch::cpu::current_time_nanos() / 1000;
-        let cpu_id = crate::arch::cpu::id();
+        let cpu_id = crate::arch::cpu::phys_id();
         let level = record.level();
         let level_color = match level {
             Level::Error => ColorCode::BrightRed,
