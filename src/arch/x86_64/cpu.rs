@@ -31,6 +31,16 @@ pub fn current_time_nanos() -> u64 {
     current_cycle() * 1000 / frequency() as u64
 }
 
+pub fn thread_pointer() -> usize {
+    let ret;
+    unsafe { asm!("mov {0}, gs:0", out(reg) ret, options(nostack)) }; // PerCpu::self_vaddr
+    ret
+}
+
+pub fn set_thread_pointer(tp: usize) {
+    unsafe { Msr::IA32_GS_BASE.write(tp as u64) };
+}
+
 /// Reset CPU states for hypervisor use.
 pub fn init() {
     // Setup new GDT, IDT, CS, TSS

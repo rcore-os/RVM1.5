@@ -19,7 +19,7 @@ fn try_handle_panic(cpu_data: &mut PerCpu) -> HvResult {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    let cpu_data = PerCpu::from_local_base_mut();
+    let cpu_data = PerCpu::current_mut();
     error!("\n{}\nCurrent Cpu: {:#x?}", info, cpu_data);
     let err = try_handle_panic(cpu_data);
     error!("Try handle panic failed: {:?}", err);

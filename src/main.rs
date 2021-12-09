@@ -108,15 +108,14 @@ fn primary_init_late() {
     INIT_LATE_OK.store(1, Ordering::Release);
 }
 
-fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
-    let cpu_data = PerCpu::from_id_mut(cpu_id);
+fn main(cpu_data: &mut PerCpu, linux_sp: usize) -> HvResult {
     let online_cpus = HvHeader::get().online_cpus as usize;
     let is_primary = ENTERED_CPUS.fetch_add(1, Ordering::SeqCst) == 0;
     wait_for_other_completed(&ENTERED_CPUS, online_cpus)?;
     println!(
         "{} CPU {} entered.",
         if is_primary { "Primary" } else { "Secondary" },
-        cpu_id
+        cpu_data.id
     );
 
     if is_primary {
@@ -125,8 +124,8 @@ fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
         wait_for_other_completed(&INIT_EARLY_OK, 1)?;
     }
 
-    cpu_data.init(cpu_id, linux_sp, &cell::ROOT_CELL)?;
-    println!("CPU {} init OK.", cpu_id);
+    cpu_data.init(linux_sp, &cell::ROOT_CELL)?;
+    println!("CPU {} init OK.", cpu_data.id);
     INITED_CPUS.fetch_add(1, Ordering::SeqCst);
     wait_for_other_completed(&INITED_CPUS, online_cpus)?;
 
@@ -139,12 +138,15 @@ fn main(cpu_id: usize, linux_sp: usize) -> HvResult {
     cpu_data.activate_vmm()
 }
 
-extern "sysv64" fn entry(cpu_id: usize, linux_sp: usize) -> i32 {
-    if let Err(e) = main(cpu_id, linux_sp) {
+extern "sysv64" fn entry(cpu_data: &mut PerCpu, linux_sp: usize) -> i32 {
+    if let Err(e) = main(cpu_data, linux_sp) {
         error!("{:?}", e);
         ERROR_NUM.store(e.code(), Ordering::Release);
     }
     let code = ERROR_NUM.load(Ordering::Acquire);
-    println!("CPU {} return back to driver with code {}.", cpu_id, code);
+    println!(
+        "CPU {} return back to driver with code {}.",
+        cpu_data.id, code
+    );
     code
 }

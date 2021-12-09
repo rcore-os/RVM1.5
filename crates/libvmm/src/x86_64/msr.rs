@@ -57,6 +57,7 @@ pub enum Msr {
 
 impl Msr {
     /// Read 64 bits msr register.
+    #[inline(always)]
     pub fn read(self) -> u64 {
         unsafe { rdmsr(self as _) }
     }
@@ -67,6 +68,7 @@ impl Msr {
     ///
     /// The caller must ensure that this write operation has no unsafe side
     /// effects.
+    #[inline(always)]
     pub unsafe fn write(self, value: u64) {
         wrmsr(self as _, value)
     }

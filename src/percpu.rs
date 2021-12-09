@@ -3,13 +3,12 @@ use core::mem::size_of;
 use core::sync::atomic::{AtomicIsize, Ordering};
 
 use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
-use crate::arch::{HostPageTable, LinuxContext};
+use crate::arch::{cpu, LinuxContext};
 use crate::cell::Cell;
-use crate::consts::{HV_STACK_SIZE, LOCAL_PER_CPU_BASE};
+use crate::consts::HV_STACK_SIZE;
 use crate::error::HvResult;
 use crate::ffi::PER_CPU_ARRAY_PTR;
 use crate::header::HvHeader;
-use crate::memory::{addr::virt_to_phys, MemFlags, MemoryRegion, MemorySet};
 
 pub const PER_CPU_SIZE: usize = size_of::<PerCpu>();
 
@@ -21,40 +20,40 @@ pub enum CpuState {
     HvEnabled,
 }
 
-#[repr(align(4096))]
+#[repr(C, align(4096))]
 pub struct PerCpu {
+    /// Referenced by arch::cpu::thread_pointer() for x86_64.
+    self_vaddr: usize,
+
     pub id: usize,
     pub phys_id: usize,
     pub state: CpuState,
     pub vcpu: Vcpu,
-    stack: [usize; HV_STACK_SIZE / size_of::<usize>()],
     linux: LinuxContext,
-    hvm: MemorySet<HostPageTable>,
+
+    stack: [usize; HV_STACK_SIZE / size_of::<usize>()],
 }
 
 impl PerCpu {
-    pub fn from_id<'a>(cpu_id: usize) -> &'a Self {
-        unsafe {
-            &core::slice::from_raw_parts(PER_CPU_ARRAY_PTR, HvHeader::get().max_cpus as usize)
-                [cpu_id]
-        }
-    }
-
-    pub fn from_id_mut<'a>(cpu_id: usize) -> &'a mut Self {
-        unsafe {
+    pub fn init_early<'a>(cpu_id: usize) -> &'a mut Self {
+        let ret = unsafe {
             &mut core::slice::from_raw_parts_mut(
                 PER_CPU_ARRAY_PTR,
                 HvHeader::get().max_cpus as usize,
             )[cpu_id]
-        }
+        };
+        ret.id = cpu_id;
+        ret.self_vaddr = ret as *const _ as usize;
+        cpu::set_thread_pointer(ret.self_vaddr);
+        ret
     }
 
-    pub fn from_local_base<'a>() -> &'a Self {
-        unsafe { &*(LOCAL_PER_CPU_BASE as *const Self) }
+    pub fn current<'a>() -> &'a Self {
+        unsafe { &*(cpu::thread_pointer() as *const Self) }
     }
 
-    pub fn from_local_base_mut<'a>() -> &'a mut Self {
-        unsafe { &mut *(LOCAL_PER_CPU_BASE as *mut Self) }
+    pub fn current_mut<'a>() -> &'a mut Self {
+        unsafe { &mut *(cpu::thread_pointer() as *mut Self) }
     }
 
     pub fn stack_top(&self) -> usize {
@@ -65,41 +64,22 @@ impl PerCpu {
         ACTIVATED_CPUS.load(Ordering::Acquire) as _
     }
 
-    pub fn init(&mut self, cpu_id: usize, linux_sp: usize, cell: &Cell) -> HvResult {
-        info!("CPU {} init...", cpu_id);
+    pub fn init(&mut self, linux_sp: usize, cell: &Cell) -> HvResult {
+        info!("CPU {} init...", self.id);
 
-        self.id = cpu_id;
-        self.phys_id = crate::arch::cpu::phys_id();
+        self.phys_id = cpu::phys_id();
         self.state = CpuState::HvDisabled;
         self.linux = LinuxContext::load_from(linux_sp);
-        crate::arch::cpu::init();
+        cpu::init();
 
-        let mut hvm = cell.hvm.clone();
-        let vaddr = self as *const _ as usize;
-        let paddr = virt_to_phys(vaddr);
-        hvm.insert(MemoryRegion::new_with_offset_mapper(
-            LOCAL_PER_CPU_BASE,
-            paddr,
-            PER_CPU_SIZE,
-            MemFlags::READ | MemFlags::WRITE,
-        ))?;
         unsafe {
             // avoid dropping, same below
-            core::ptr::write(&mut self.hvm, hvm);
-            self.hvm.activate();
+            cell.hvm.activate();
             core::ptr::write(&mut self.vcpu, Vcpu::new(&self.linux, cell)?);
         }
 
         self.state = CpuState::HvEnabled;
         Ok(())
-    }
-
-    #[inline(never)]
-    fn deactivate_vmm_common(&mut self) -> HvResult {
-        self.vcpu.exit(&mut self.linux)?;
-        self.linux.restore();
-        self.state = CpuState::HvDisabled;
-        self.linux.return_to_linux(self.vcpu.regs());
     }
 
     pub fn activate_vmm(&mut self) -> HvResult {
@@ -115,13 +95,10 @@ impl PerCpu {
         ACTIVATED_CPUS.fetch_add(-1, Ordering::SeqCst);
 
         self.vcpu.set_return_val(ret_code);
-
-        // Restore full per_cpu region access so that we can switch
-        // back to the common stack mapping and to Linux page tables.
-        let common_cpu_data = Self::from_id_mut(self.id);
-        let common_percpu_vaddr = common_cpu_data as *const _ as usize;
-        unsafe { asm!("add rsp, {}", in(reg) common_percpu_vaddr - LOCAL_PER_CPU_BASE) };
-        common_cpu_data.deactivate_vmm_common()
+        self.vcpu.exit(&mut self.linux)?;
+        self.linux.restore();
+        self.state = CpuState::HvDisabled;
+        self.linux.return_to_linux(self.vcpu.regs());
     }
 
     pub fn fault(&mut self) -> HvResult {
@@ -136,6 +113,7 @@ impl Debug for PerCpu {
         let mut res = f.debug_struct("PerCpu");
         res.field("id", &self.id)
             .field("phys_id", &self.phys_id)
+            .field("self_vaddr", &self.self_vaddr)
             .field("state", &self.state);
         if self.state != CpuState::HvDisabled {
             res.field("vcpu", &self.vcpu);

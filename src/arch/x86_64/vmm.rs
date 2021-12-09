@@ -57,7 +57,7 @@ pub(super) struct VmExit<'a> {
 impl VmExit<'_> {
     pub fn new() -> Self {
         Self {
-            cpu_data: PerCpu::from_local_base_mut(),
+            cpu_data: PerCpu::current_mut(),
         }
     }
 

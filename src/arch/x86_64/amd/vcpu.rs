@@ -22,6 +22,8 @@ use crate::percpu::PerCpu;
 pub struct Vcpu {
     /// Save guest general registers when handle VM exits.
     guest_regs: GuestRegisters,
+    /// GS_BASE will be loaded from here when handle VM exits.
+    host_tp: u64,
     /// RSP will be loaded from here when handle VM exits.
     host_stack_top: u64,
     /// host state-save area.
@@ -63,24 +65,21 @@ impl Vcpu {
             Cr4::write(super::super::HOST_CR4);
         }
 
+        let cpu_data = PerCpu::current();
         let mut ret = Self {
             guest_regs: Default::default(),
+            host_tp: cpu_data as *const _ as _,
+            host_stack_top: cpu_data.stack_top() as _,
             host_save_area,
-            host_stack_top: PerCpu::from_local_base().stack_top() as _,
             vmcb: Default::default(),
         };
-        assert_eq!(
-            unsafe { (&ret.guest_regs as *const GuestRegisters).add(1) as u64 },
-            &ret.host_stack_top as *const _ as u64
-        );
         ret.vmcb_setup(linux, cell);
 
         Ok(ret)
     }
 
     pub fn enter(&mut self, linux: &LinuxContext) -> HvResult {
-        let common_cpu_data = PerCpu::from_id(PerCpu::from_local_base().id);
-        let vmcb_paddr = virt_to_phys(&common_cpu_data.vcpu.vmcb as *const _ as usize);
+        let vmcb_paddr = virt_to_phys(&self.vmcb as *const _ as usize);
         let regs = self.regs_mut();
         regs.rax = vmcb_paddr as _;
         regs.rbx = linux.rbx;
@@ -238,7 +237,7 @@ impl Vcpu {
         linux.gs.selector = segmentation::gs();
         linux.tss.selector = unsafe { task::tr() };
         linux.fs.base = Msr::IA32_FS_BASE.read();
-        linux.gs.base = Msr::IA32_GS_BASE.read();
+        linux.gs.base = vmcb.gs.base;
     }
 }
 
@@ -272,7 +271,7 @@ impl VcpuAccessGuestState for Vcpu {
     }
 
     fn gs_base(&self) -> u64 {
-        Msr::IA32_GS_BASE.read()
+        self.vmcb.save.gs.base
     }
 
     fn cr(&self, cr_idx: usize) -> u64 {
@@ -316,17 +315,27 @@ unsafe extern "sysv64" fn svm_run() -> ! {
     asm!(
         "vmrun rax",
         save_regs_to_stack!(),
-        "mov r14, rax",         // save host RAX to r14 for VMRUN
-        "mov r15, rsp",         // save temporary RSP to r15
-        "mov rsp, [rsp + {0}]", // set RSP to Vcpu::host_stack_top
+        "mov r14, rax",             // save host RAX to r14 for VMRUN
+        "mov r15, rsp",             // save temporary RSP to r15
+        "mov rdi, [rsp + {0}]",     // set the first argument to Vcpu::host_tp
+        "mov rsp, [rsp + {0} + 8]", // set RSP to Vcpu::host_stack_top
         "call {1}",
-        "lea rsp, [r15 + 8]",   // load temporary RSP and skip one place for RAX
-        "push r14",             // push saved RAX to restore RAX later
+        "lea rsp, [r15 + 8]",       // load temporary RSP and skip one place for RAX
+        "push r14",                 // push saved RAX to restore RAX later
         restore_regs_from_stack!(),
         "jmp {2}",
         const core::mem::size_of::<GuestRegisters>(),
-        sym crate::arch::vmm::vmexit_handler,
+        sym vmexit_handler_wrapper,
         sym svm_run,
         options(noreturn),
     );
+}
+
+extern "sysv64" fn vmexit_handler_wrapper(cpu_data: &mut PerCpu) {
+    // Since VMRUN won't save/restore GS_BASE, we need to do it manually.
+    let guest_tp = Msr::IA32_GS_BASE.read();
+    cpu_data.vcpu.vmcb.save.gs.base = guest_tp;
+    unsafe { Msr::IA32_GS_BASE.write(cpu_data as *const _ as u64) };
+    crate::arch::vmm::vmexit_handler();
+    unsafe { Msr::IA32_GS_BASE.write(guest_tp) };
 }

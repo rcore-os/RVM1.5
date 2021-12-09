@@ -22,17 +22,18 @@ use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GuestPageTableImmut, GuestRegisters, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
+use crate::percpu::PerCpu;
 
 #[repr(C)]
 pub struct Vcpu {
-    /// VMXON region, required by VMX
-    _vmxon_region: VmxRegion,
-    /// VMCS of this CPU, required by VMX
-    vmcs_region: VmxRegion,
     /// Save guest general registers when handle VM exits.
     guest_regs: GuestRegisters,
     /// RSP will be loaded from here when handle VM exits.
     host_stack_top: u64,
+    /// VMXON region, required by VMX
+    vmxon_region: VmxRegion,
+    /// VMCS of this CPU, required by VMX
+    vmcs_region: VmxRegion,
 }
 
 lazy_static! {
@@ -101,10 +102,10 @@ impl Vcpu {
 
         // Setup VMCS.
         let mut ret = Self {
-            _vmxon_region: vmxon_region,
-            vmcs_region,
-            host_stack_top: 0,
             guest_regs: Default::default(),
+            host_stack_top: PerCpu::current().stack_top() as _,
+            vmxon_region,
+            vmcs_region,
         };
         ret.vmcs_setup(linux, cell)?;
 
@@ -125,7 +126,7 @@ impl Vcpu {
                 "mov rsp, {0}",
                 restore_regs_from_stack!(),
                 "vmlaunch",
-                in(reg) &self.guest_regs as * const _ as usize,
+                in(reg) regs as * const _ as usize,
             );
         }
         // Never return if successful
@@ -206,15 +207,9 @@ impl Vcpu {
         VmcsField64Host::IA32_SYSENTER_EIP.write(0)?;
         VmcsField32Host::IA32_SYSENTER_CS.write(0)?;
 
-        let cpu_local = crate::PerCpu::from_local_base();
-        let rsp = &cpu_local.vcpu.host_stack_top as *const _ as u64;
+        let rsp = &PerCpu::current().vcpu.host_stack_top as *const _ as u64;
         VmcsField64Host::RSP.write(rsp)?; // used for saving guest registers
-        self.host_stack_top = cpu_local.stack_top() as _; // the real host stack
         VmcsField64Host::RIP.write(vmx_exit as usize as _)?;
-        assert_eq!(
-            unsafe { (&cpu_local.vcpu.guest_regs as *const GuestRegisters).add(1) as u64 },
-            rsp
-        );
         Ok(())
     }
 

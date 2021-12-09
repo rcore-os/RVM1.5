@@ -6,7 +6,7 @@ use x86_64::{addr::PhysAddr, structures::paging::PhysFrame, structures::Descript
 use super::segmentation::Segment;
 use super::tables::{GDTStruct, IDTStruct, GDT};
 
-const SAVED_LINUX_REGS: usize = 7;
+const SAVED_LINUX_REGS: usize = 8;
 
 #[derive(Debug)]
 pub struct LinuxContext {
@@ -112,17 +112,17 @@ impl LinuxContext {
         let mut fs = Segment::from_selector(segmentation::fs(), &gdt);
         let mut gs = Segment::from_selector(segmentation::gs(), &gdt);
         fs.base = Msr::IA32_FS_BASE.read();
-        gs.base = Msr::IA32_GS_BASE.read();
+        gs.base = regs[0];
 
         Self {
             rsp: regs.as_ptr_range().end as _,
-            r15: regs[0],
-            r14: regs[1],
-            r13: regs[2],
-            r12: regs[3],
-            rbx: regs[4],
-            rbp: regs[5],
-            rip: regs[6],
+            r15: regs[1],
+            r14: regs[2],
+            r13: regs[3],
+            r12: regs[4],
+            rbx: regs[5],
+            rbp: regs[6],
+            rip: regs[7],
             cs: Segment::from_selector(segmentation::cs(), &gdt),
             ds: Segment::from_selector(segmentation::ds(), &gdt),
             es: Segment::from_selector(segmentation::es(), &gdt),
@@ -177,13 +177,13 @@ impl LinuxContext {
             segmentation::load_gs(self.gs.selector);
 
             Msr::IA32_FS_BASE.write(self.fs.base);
-            Msr::IA32_GS_BASE.write(self.gs.base);
         }
     }
 
     /// Restore linux general-purpose registers and stack, then return back to linux.
     pub fn return_to_linux(&self, guest_regs: &GuestRegisters) -> ! {
         unsafe {
+            Msr::IA32_GS_BASE.write(self.gs.base);
             asm!(
                 "mov rsp, {linux_rsp}",
                 "push {linux_rip}",
