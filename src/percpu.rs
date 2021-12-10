@@ -49,7 +49,7 @@ impl PerCpu {
     }
 
     pub fn current<'a>() -> &'a Self {
-        unsafe { &*(cpu::thread_pointer() as *const Self) }
+        Self::current_mut()
     }
 
     pub fn current_mut<'a>() -> &'a mut Self {
@@ -73,8 +73,9 @@ impl PerCpu {
         cpu::init();
 
         unsafe {
+            // Activate hypervisor page table on each cpu.
+            crate::memory::hv_page_table().activate();
             // avoid dropping, same below
-            cell.hvm.activate();
             core::ptr::write(&mut self.vcpu, Vcpu::new(&self.linux, cell)?);
         }
 

@@ -138,7 +138,7 @@ impl VmExit<'_> {
 
         let pt = self.cpu_data.vcpu.guest_page_table();
         let (gpaddr, _, _) = pt.query(gvaddr)?;
-        let (hpaddr, _, _) = cell::ROOT_CELL.gpm.page_table().query(gpaddr)?;
+        let (hpaddr, _, _) = cell::root_cell().gpm.page_table().query(gpaddr)?;
         println!(
             "GVA({:#x?}) -> GPA({:#x?}) -> HPA({:#x?}):",
             gvaddr, gpaddr, hpaddr

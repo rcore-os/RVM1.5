@@ -13,7 +13,7 @@ sudo ln -sf ~/rvm-intel.bin /lib/firmware
 git clone https://github.com/siemens/jailhouse.git
 cd jailhouse
 git checkout v0.10
-patch -f -p1 < ~/jailhouse.patch
+patch -f -p1 < ../jailhouse.patch
 ./gen-config.sh
 make
 

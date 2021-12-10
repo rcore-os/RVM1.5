@@ -34,10 +34,22 @@ index 1e59840e..62d263e3 100644
  CONFIGS = $(shell cd $(src); ls $(SRCARCH)/*.c)
 
 diff --git a/driver/main.c b/driver/main.c
-index fe752753..319158fb 100644
+index fe752753..0fad50d2 100644
 --- a/driver/main.c
 +++ b/driver/main.c
-@@ -63,10 +63,10 @@
+@@ -58,15 +58,22 @@
+ #error 64-bit kernel required!
+ #endif
+
++#ifndef MSR_IA32_FEAT_CTL
++#define MSR_IA32_FEAT_CTL MSR_IA32_FEATURE_CONTROL
++#endif
++#ifndef FEAT_CTL_VMX_ENABLED_OUTSIDE_SMX
++#define FEAT_CTL_VMX_ENABLED_OUTSIDE_SMX FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX
++#endif
++
+ #if JAILHOUSE_CELL_ID_NAMELEN != JAILHOUSE_CELL_NAME_MAXLEN
+ # warning JAILHOUSE_CELL_ID_NAMELEN and JAILHOUSE_CELL_NAME_MAXLEN out of sync!
  #endif
 
  #ifdef CONFIG_X86
@@ -51,7 +63,7 @@ index fe752753..319158fb 100644
  #endif
 
  MODULE_DESCRIPTION("Management driver for Jailhouse partitioning hypervisor");
-@@ -100,7 +100,11 @@ static struct resource *hypervisor_mem_res;
+@@ -100,7 +107,11 @@ static struct resource *hypervisor_mem_res;
 
  static typeof(ioremap_page_range) *ioremap_page_range_sym;
  #ifdef CONFIG_X86
@@ -64,7 +76,19 @@ index fe752753..319158fb 100644
  #endif
  #ifdef CONFIG_ARM
  static typeof(__boot_cpu_mode) *__boot_cpu_mode_sym;
-@@ -550,7 +554,7 @@ static int jailhouse_cmd_enable(struct jailhouse_system __user *arg)
+@@ -402,9 +413,8 @@ static int jailhouse_cmd_enable(struct jailhouse_system __user *arg)
+ 	if (boot_cpu_has(X86_FEATURE_VMX)) {
+ 		u64 features;
+
+-		rdmsrl(MSR_IA32_FEATURE_CONTROL, features);
+-		if ((features &
+-		     FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX) == 0) {
++		rdmsrl(MSR_IA32_FEAT_CTL, features);
++		if ((features & FEAT_CTL_VMX_ENABLED_OUTSIDE_SMX) == 0) {
+ 			pr_err("jailhouse: VT-x disabled by Firmware/BIOS\n");
+ 			err = -ENODEV;
+ 			goto error_put_module;
+@@ -550,7 +560,7 @@ static int jailhouse_cmd_enable(struct jailhouse_system __user *arg)
  		config->platform_info.x86.tsc_khz = tsc_khz;
  	if (config->platform_info.x86.apic_khz == 0)
  		config->platform_info.x86.apic_khz =
@@ -73,7 +97,7 @@ index fe752753..319158fb 100644
  #endif
 
  	err = jailhouse_cell_prepare_root(&config->root_cell);
-@@ -695,10 +699,9 @@ static int jailhouse_cmd_disable(void)
+@@ -695,10 +705,9 @@ static int jailhouse_cmd_disable(void)
  	preempt_enable();
 
  	err = error_code;
@@ -87,7 +111,7 @@ index fe752753..319158fb 100644
 
  	jailhouse_cell_delete_root();
  	jailhouse_enabled = false;
-@@ -885,19 +888,20 @@ static int __init jailhouse_init(void)
+@@ -885,19 +894,20 @@ static int __init jailhouse_init(void)
  {
  	int err;
 
@@ -177,7 +201,7 @@ index 66e13c3d..51c8531c 100644
  /*
   * The flag JAILHOUSE_SYS_VIRTUAL_DEBUG_CONSOLE allows the root cell to read
 diff --git a/pyjailhouse/sysfs_parser.py b/pyjailhouse/sysfs_parser.py
-index c4154736..441d722c 100644
+index c4154736..e1a6efca 100644
 --- a/pyjailhouse/sysfs_parser.py
 +++ b/pyjailhouse/sysfs_parser.py
 @@ -100,19 +100,19 @@ def parse_iomem(pcidevices):
@@ -221,7 +245,15 @@ index c4154736..441d722c 100644
      f = input_open('/sys/firmware/acpi/tables/DMAR', 'rb')
      signature = f.read(4)
      if signature != b'DMAR':
-@@ -889,12 +890,12 @@ class IOMemRegionTree:
+@@ -315,6 +316,7 @@ def parse_dmar(pcidevices, ioapics, dmar_regions):
+
+
+ def parse_ivrs(pcidevices, ioapics):
++    return [], []
+     def format_bdf(bdf):
+         bus, dev, fun = (bdf >> 8) & 0xff, (bdf >> 3) & 0x1f, bdf & 0x7
+         return '%02x:%02x.%x' % (bus, dev, fun)
+@@ -889,12 +891,12 @@ class IOMemRegionTree:
                  regions.extend(tree.regions_split_by_kernel())
                  continue
 

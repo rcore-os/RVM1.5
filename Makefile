@@ -80,6 +80,10 @@ fmt:
 clean:
 	cargo clean
 
+.PHONY: install
+install:
+	sudo cp $(target_bin) /lib/firmware
+
 .PHONY: scp
 scp:
 	scp -P $(PORT) -r $(target_bin) ubuntu@localhost:/home/ubuntu

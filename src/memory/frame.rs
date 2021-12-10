@@ -35,12 +35,10 @@ impl FrameAllocator {
         }
     }
 
-    fn new(base: PhysAddr, size: usize) -> Self {
-        let mut inner = FrameAlloc::DEFAULT;
-        let base = align_up(base);
+    fn init(&mut self, base: PhysAddr, size: usize) {
+        self.base = align_up(base);
         let page_count = align_up(size) / PAGE_SIZE;
-        inner.insert(0..page_count);
-        Self { base, inner }
+        self.inner.insert(0..page_count);
     }
 
     /// # Safety
@@ -209,7 +207,7 @@ pub(super) fn init() {
     let mem_pool_start = align_up(sys_config.hypervisor_memory.phys_start as usize + used_size);
     let mem_pool_size = align_down(sys_config.hypervisor_memory.size as usize - used_size);
 
-    *FRAME_ALLOCATOR.lock() = FrameAllocator::new(mem_pool_start, mem_pool_size);
+    FRAME_ALLOCATOR.lock().init(mem_pool_start, mem_pool_size);
 
     info!(
         "Frame allocator init end: {:#x?}",

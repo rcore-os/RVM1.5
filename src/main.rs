@@ -90,12 +90,13 @@ fn primary_init_early() -> HvResult {
         option_env!("STATS").unwrap_or("off"),
     );
 
-    memory::init();
-
+    memory::init_heap();
     system_config.check()?;
     info!("Hypervisor header: {:#x?}", HvHeader::get());
     debug!("System config: {:#x?}", system_config);
 
+    memory::init_frame_allocator();
+    memory::init_hv_page_table()?;
     cell::init()?;
 
     INIT_EARLY_OK.store(1, Ordering::Release);
@@ -124,7 +125,7 @@ fn main(cpu_data: &mut PerCpu, linux_sp: usize) -> HvResult {
         wait_for_other_completed(&INIT_EARLY_OK, 1)?;
     }
 
-    cpu_data.init(linux_sp, &cell::ROOT_CELL)?;
+    cpu_data.init(linux_sp, cell::root_cell())?;
     println!("CPU {} init OK.", cpu_data.id);
     INITED_CPUS.fetch_add(1, Ordering::SeqCst);
     wait_for_other_completed(&INITED_CPUS, online_cpus)?;

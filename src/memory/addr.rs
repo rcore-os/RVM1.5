@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use crate::consts::{HV_BASE, PAGE_SIZE};
+use crate::consts::PAGE_SIZE;
 
 pub type VirtAddr = usize;
 pub type PhysAddr = usize;
@@ -13,19 +13,15 @@ pub type GuestPhysAddr = usize;
 pub type HostVirtAddr = VirtAddr;
 pub type HostPhysAddr = PhysAddr;
 
-lazy_static! {
-    static ref PHYS_VIRT_OFFSET: usize = HV_BASE
-        - crate::config::HvSystemConfig::get()
-            .hypervisor_memory
-            .phys_start as usize;
-}
+/// vaddr = paddr + this_offset, initialized at memory::init_heap().
+pub(super) static mut PHYS_VIRT_OFFSET: usize = 0;
 
 pub fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
-    vaddr - *PHYS_VIRT_OFFSET
+    vaddr - unsafe { PHYS_VIRT_OFFSET }
 }
 
 pub fn phys_to_virt(paddr: PhysAddr) -> VirtAddr {
-    paddr + *PHYS_VIRT_OFFSET
+    paddr + unsafe { PHYS_VIRT_OFFSET }
 }
 
 pub const fn align_down(addr: usize) -> usize {
