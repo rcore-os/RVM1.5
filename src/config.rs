@@ -1,11 +1,8 @@
 use core::fmt::{Debug, Formatter, Result};
 use core::{mem::size_of, slice};
 
-use crate::consts::HV_BASE;
 use crate::error::HvResult;
-use crate::header::HvHeader;
 use crate::memory::MemFlags;
-use crate::percpu::PER_CPU_SIZE;
 
 const CONFIG_SIGNATURE: [u8; 6] = *b"RVMSYS";
 const CONFIG_REVISION: u16 = 10;
@@ -199,10 +196,7 @@ impl HvCellDesc {
 
 impl HvSystemConfig {
     pub fn get<'a>() -> &'a Self {
-        let header = HvHeader::get();
-        let core_and_percpu_size =
-            header.core_size as usize + header.max_cpus as usize * PER_CPU_SIZE;
-        unsafe { &*((HV_BASE + core_and_percpu_size) as *const Self) }
+        unsafe { &*crate::consts::hv_config_ptr() }
     }
 
     pub const fn size(&self) -> usize {

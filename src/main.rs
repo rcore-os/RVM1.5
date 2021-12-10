@@ -23,7 +23,6 @@ mod error;
 mod cell;
 mod config;
 mod consts;
-mod ffi;
 mod header;
 mod hypercall;
 mod memory;

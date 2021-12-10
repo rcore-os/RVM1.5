@@ -1,7 +1,6 @@
 use core::fmt::{Debug, Formatter, Result};
 
-use crate::ffi::HEADER_PTR;
-use crate::percpu::PER_CPU_SIZE;
+use crate::consts::{HV_HEADER_PTR, PER_CPU_SIZE};
 
 const HEADER_SIGNATURE: [u8; 8] = *b"RVMIMAGE";
 
@@ -22,7 +21,7 @@ pub struct HvHeader {
 
 impl HvHeader {
     pub fn get<'a>() -> &'a Self {
-        unsafe { &*HEADER_PTR }
+        unsafe { &*HV_HEADER_PTR }
     }
 }
 

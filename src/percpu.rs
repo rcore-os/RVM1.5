@@ -1,16 +1,13 @@
 use core::fmt::{Debug, Formatter, Result};
-use core::mem::size_of;
 use core::sync::atomic::{AtomicIsize, Ordering};
 
 use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
 use crate::arch::{cpu, LinuxContext};
 use crate::cell::Cell;
-use crate::consts::HV_STACK_SIZE;
+use crate::consts::{PER_CPU_ARRAY_PTR, PER_CPU_SIZE};
 use crate::error::HvResult;
-use crate::ffi::PER_CPU_ARRAY_PTR;
 use crate::header::HvHeader;
-
-pub const PER_CPU_SIZE: usize = size_of::<PerCpu>();
+use crate::memory::VirtAddr;
 
 static ACTIVATED_CPUS: AtomicIsize = AtomicIsize::new(0);
 
@@ -23,28 +20,24 @@ pub enum CpuState {
 #[repr(C, align(4096))]
 pub struct PerCpu {
     /// Referenced by arch::cpu::thread_pointer() for x86_64.
-    self_vaddr: usize,
+    self_vaddr: VirtAddr,
 
     pub id: usize,
     pub phys_id: usize,
     pub state: CpuState,
     pub vcpu: Vcpu,
     linux: LinuxContext,
-
-    stack: [usize; HV_STACK_SIZE / size_of::<usize>()],
+    // Stack will be placed here.
 }
 
 impl PerCpu {
     pub fn init_early<'a>(cpu_id: usize) -> &'a mut Self {
-        let ret = unsafe {
-            &mut core::slice::from_raw_parts_mut(
-                PER_CPU_ARRAY_PTR,
-                HvHeader::get().max_cpus as usize,
-            )[cpu_id]
-        };
+        assert!(cpu_id < HvHeader::get().max_cpus as usize);
+        let vaddr = PER_CPU_ARRAY_PTR as VirtAddr + cpu_id * PER_CPU_SIZE;
+        let ret = unsafe { &mut *(vaddr as *mut Self) };
         ret.id = cpu_id;
-        ret.self_vaddr = ret as *const _ as usize;
-        cpu::set_thread_pointer(ret.self_vaddr);
+        ret.self_vaddr = vaddr;
+        cpu::set_thread_pointer(vaddr);
         ret
     }
 
@@ -56,8 +49,8 @@ impl PerCpu {
         unsafe { &mut *(cpu::thread_pointer() as *mut Self) }
     }
 
-    pub fn stack_top(&self) -> usize {
-        self.stack.as_ptr_range().end as _
+    pub fn stack_top(&self) -> VirtAddr {
+        self as *const _ as VirtAddr + PER_CPU_SIZE - 8
     }
 
     pub fn activated_cpus() -> usize {

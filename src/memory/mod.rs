@@ -1,6 +1,6 @@
 //! Hypervisor Memory Layout
 //!
-//!     +--------------------------------------+ - lower address (HV_BASE: 0xffff_ff00_0000_0000)
+//!     +--------------------------------------+ - HV_BASE: 0xffff_ff00_0000_0000 (lower address)
 //!     | HvHeader                             |
 //!     +--------------------------------------+
 //!     | Text Segment                         |
@@ -15,32 +15,35 @@
 //!     | BSS Segment                          |
 //!     | (includes hypervisor heap)           |
 //!     |                                      |
-//!     +--------------------------------------+ - core_end (HV_BASE + core_size)
+//!     +--------------------------------------+ - PER_CPU_ARRAY_PTR (core_end)
 //!     |  +--------------------------------+  |
 //!     |  | Per-CPU Data 0                 |  |
-//!     |  |                                |  |
 //!     |  +--------------------------------+  |
+//!     |  | Per-CPU Stack 0                |  |
+//!     |  +--------------------------------+  | - PER_CPU_ARRAY_PTR + PER_CPU_SIZE
 //!     |  | Per-CPU Data 1                 |  |
-//!     |  |                                |  |
+//!     |  +--------------------------------+  |
+//!     |  | Per-CPU Stack 1                |  |
 //!     |  +--------------------------------+  |
 //!     :  :                                :  :
 //!     :  :                                :  :
 //!     |  +--------------------------------+  |
 //!     |  | Per-CPU Data n-1               |  |
-//!     |  |                                |  |
 //!     |  +--------------------------------+  |
+//!     |  | Per-CPU Stack n-1              |  |
+//!     |  +--------------------------------+  | - hv_config_ptr
 //!     |  | HvSystemConfig                 |  |
 //!     |  | +----------------------------+ |  |
 //!     |  | | CellConfigLayout           | |  |
 //!     |  | |                            | |  |
 //!     |  | +----------------------------+ |  |
 //!     |  +--------------------------------+  |
-//!     +--------------------------------------|
+//!     +--------------------------------------| - free_memory_start
 //!     |  Dynamic Page Pool                   |
 //!     :                                      :
 //!     :                                      :
 //!     |                                      |
-//!     +--------------------------------------+ - higher address (HV_BASE + sys_config.hypervisor_memory.size)
+//!     +--------------------------------------+ - hv_end (higher address)
 //!
 
 mod frame;
@@ -119,7 +122,7 @@ pub fn init_hv_page_table() -> HvResult {
         header.core_size,
         MemFlags::READ | MemFlags::WRITE | MemFlags::EXECUTE,
     ))?;
-    // Map per-CPU data, configurations & page pool.
+    // Map per-CPU data, configurations & free page pool.
     hv_pt.insert(MemoryRegion::new_with_offset_mapper(
         HV_BASE + header.core_size,
         hv_phys_start + header.core_size,

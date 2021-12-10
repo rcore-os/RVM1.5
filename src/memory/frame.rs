@@ -4,11 +4,9 @@ use bitmap_allocator::BitAlloc;
 
 use spin::Mutex;
 
-use super::addr::{align_down, align_up, is_aligned, phys_to_virt, PhysAddr};
-use crate::config::HvSystemConfig;
-use crate::consts::{PAGE_SIZE, PER_CPU_SIZE};
+use super::addr::{align_down, align_up, is_aligned, phys_to_virt, virt_to_phys, PhysAddr};
+use crate::consts::PAGE_SIZE;
 use crate::error::HvResult;
-use crate::header::HvHeader;
 
 // Support max 1M * 4096 = 1GB memory.
 type FrameAlloc = bitmap_allocator::BitAlloc1M;
@@ -199,18 +197,15 @@ impl Drop for Frame {
 
 /// Initialize the physical frame allocator.
 pub(super) fn init() {
-    let header = HvHeader::get();
-    let sys_config = HvSystemConfig::get();
-    let used_size =
-        header.core_size as usize + header.max_cpus as usize * PER_CPU_SIZE + sys_config.size();
-
-    let mem_pool_start = align_up(sys_config.hypervisor_memory.phys_start as usize + used_size);
-    let mem_pool_size = align_down(sys_config.hypervisor_memory.size as usize - used_size);
-
-    FRAME_ALLOCATOR.lock().init(mem_pool_start, mem_pool_size);
+    let mem_pool_start = crate::consts::free_memory_start();
+    let mem_pool_end = align_down(crate::consts::hv_end());
+    let mem_pool_size = mem_pool_end - mem_pool_start;
+    FRAME_ALLOCATOR
+        .lock()
+        .init(virt_to_phys(mem_pool_start), mem_pool_size);
 
     info!(
         "Frame allocator init end: {:#x?}",
-        phys_to_virt(mem_pool_start)..phys_to_virt(mem_pool_start) + mem_pool_size
+        mem_pool_start..mem_pool_end
     );
 }
