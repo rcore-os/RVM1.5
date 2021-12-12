@@ -2,9 +2,12 @@ use crate::percpu::PerCpu;
 
 use libvmm::msr::Msr;
 
-unsafe extern "sysv64" fn switch_stack(cpu_id: usize, linux_sp: usize) -> i32 {
+unsafe extern "sysv64" fn switch_stack(linux_sp: usize) -> i32 {
     let linux_tp = Msr::IA32_GS_BASE.read();
-    let cpu_data = PerCpu::init_early(cpu_id);
+    let cpu_data = match PerCpu::new() {
+        Ok(c) => c,
+        Err(e) => return e.code(),
+    };
     let hv_sp = cpu_data.stack_top();
     let ret;
     asm!("
@@ -28,7 +31,7 @@ unsafe extern "sysv64" fn switch_stack(cpu_id: usize, linux_sp: usize) -> i32 {
 
 #[naked]
 #[no_mangle]
-pub unsafe extern "C" fn arch_entry(_cpu_id: usize) -> i32 {
+pub unsafe extern "C" fn arch_entry() -> i32 {
     asm!("
         // rip is pushed
         cli
@@ -40,7 +43,7 @@ pub unsafe extern "C" fn arch_entry(_cpu_id: usize) -> i32 {
         push r15
         push 0  // skip gs_base
 
-        mov rsi, rsp
+        mov rdi, rsp
         call {0}
 
         pop r15 // skip gs_base

@@ -1,5 +1,5 @@
 use core::fmt::{Debug, Formatter, Result};
-use core::sync::atomic::{AtomicIsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
 use crate::arch::{cpu, LinuxContext};
@@ -9,7 +9,8 @@ use crate::error::HvResult;
 use crate::header::HvHeader;
 use crate::memory::VirtAddr;
 
-static ACTIVATED_CPUS: AtomicIsize = AtomicIsize::new(0);
+static ENTERED_CPUS: AtomicUsize = AtomicUsize::new(0);
+static ACTIVATED_CPUS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CpuState {
@@ -31,14 +32,18 @@ pub struct PerCpu {
 }
 
 impl PerCpu {
-    pub fn init_early<'a>(cpu_id: usize) -> &'a mut Self {
-        assert!(cpu_id < HvHeader::get().max_cpus as usize);
+    pub fn new<'a>() -> HvResult<&'a mut Self> {
+        if Self::entered_cpus() >= HvHeader::get().max_cpus as usize {
+            return hv_result_err!(EINVAL);
+        }
+
+        let cpu_id = ENTERED_CPUS.fetch_add(1, Ordering::SeqCst);
         let vaddr = PER_CPU_ARRAY_PTR as VirtAddr + cpu_id * PER_CPU_SIZE;
         let ret = unsafe { &mut *(vaddr as *mut Self) };
         ret.id = cpu_id;
         ret.self_vaddr = vaddr;
         cpu::set_thread_pointer(vaddr);
-        ret
+        Ok(ret)
     }
 
     pub fn current<'a>() -> &'a Self {
@@ -53,8 +58,12 @@ impl PerCpu {
         self as *const _ as VirtAddr + PER_CPU_SIZE - 8
     }
 
+    pub fn entered_cpus() -> usize {
+        ENTERED_CPUS.load(Ordering::Acquire)
+    }
+
     pub fn activated_cpus() -> usize {
-        ACTIVATED_CPUS.load(Ordering::Acquire) as _
+        ACTIVATED_CPUS.load(Ordering::Acquire)
     }
 
     pub fn init(&mut self, linux_sp: usize, cell: &Cell) -> HvResult {
@@ -86,7 +95,7 @@ impl PerCpu {
 
     pub fn deactivate_vmm(&mut self, ret_code: usize) -> HvResult {
         println!("Deactivating hypervisor on CPU {}...", self.id);
-        ACTIVATED_CPUS.fetch_add(-1, Ordering::SeqCst);
+        ACTIVATED_CPUS.fetch_sub(1, Ordering::SeqCst);
 
         self.vcpu.set_return_val(ret_code);
         self.vcpu.exit(&mut self.linux)?;

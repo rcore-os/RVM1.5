@@ -43,7 +43,6 @@ use error::HvResult;
 use header::HvHeader;
 use percpu::PerCpu;
 
-static ENTERED_CPUS: AtomicUsize = AtomicUsize::new(0);
 static INITED_CPUS: AtomicUsize = AtomicUsize::new(0);
 static INIT_EARLY_OK: AtomicUsize = AtomicUsize::new(0);
 static INIT_LATE_OK: AtomicUsize = AtomicUsize::new(0);
@@ -53,8 +52,8 @@ fn has_err() -> bool {
     ERROR_NUM.load(Ordering::Acquire) != 0
 }
 
-fn wait_for_other_completed(counter: &AtomicUsize, max_value: usize) -> HvResult {
-    while !has_err() && counter.load(Ordering::Acquire) < max_value {
+fn wait_for(condition: impl Fn() -> bool) -> HvResult {
+    while !has_err() && condition() {
         core::hint::spin_loop();
     }
     if has_err() {
@@ -62,6 +61,10 @@ fn wait_for_other_completed(counter: &AtomicUsize, max_value: usize) -> HvResult
     } else {
         Ok(())
     }
+}
+
+fn wait_for_counter(counter: &AtomicUsize, max_value: usize) -> HvResult {
+    wait_for(|| counter.load(Ordering::Acquire) < max_value)
 }
 
 fn primary_init_early() -> HvResult {
@@ -109,9 +112,9 @@ fn primary_init_late() {
 }
 
 fn main(cpu_data: &mut PerCpu, linux_sp: usize) -> HvResult {
+    let is_primary = cpu_data.id == 0;
     let online_cpus = HvHeader::get().online_cpus as usize;
-    let is_primary = ENTERED_CPUS.fetch_add(1, Ordering::SeqCst) == 0;
-    wait_for_other_completed(&ENTERED_CPUS, online_cpus)?;
+    wait_for(|| PerCpu::entered_cpus() < online_cpus)?;
     println!(
         "{} CPU {} entered.",
         if is_primary { "Primary" } else { "Secondary" },
@@ -121,18 +124,18 @@ fn main(cpu_data: &mut PerCpu, linux_sp: usize) -> HvResult {
     if is_primary {
         primary_init_early()?;
     } else {
-        wait_for_other_completed(&INIT_EARLY_OK, 1)?;
+        wait_for_counter(&INIT_EARLY_OK, 1)?
     }
 
     cpu_data.init(linux_sp, cell::root_cell())?;
     println!("CPU {} init OK.", cpu_data.id);
     INITED_CPUS.fetch_add(1, Ordering::SeqCst);
-    wait_for_other_completed(&INITED_CPUS, online_cpus)?;
+    wait_for_counter(&INITED_CPUS, online_cpus)?;
 
     if is_primary {
         primary_init_late();
     } else {
-        wait_for_other_completed(&INIT_LATE_OK, 1)?;
+        wait_for_counter(&INIT_LATE_OK, 1)?
     }
 
     cpu_data.activate_vmm()
