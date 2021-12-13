@@ -1,5 +1,5 @@
 use core::fmt::{Debug, Formatter, Result};
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
 use crate::arch::{cpu, LinuxContext};
@@ -9,8 +9,8 @@ use crate::error::HvResult;
 use crate::header::HvHeader;
 use crate::memory::VirtAddr;
 
-static ENTERED_CPUS: AtomicUsize = AtomicUsize::new(0);
-static ACTIVATED_CPUS: AtomicUsize = AtomicUsize::new(0);
+static ENTERED_CPUS: AtomicU32 = AtomicU32::new(0);
+static ACTIVATED_CPUS: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CpuState {
@@ -23,8 +23,7 @@ pub struct PerCpu {
     /// Referenced by arch::cpu::thread_pointer() for x86_64.
     self_vaddr: VirtAddr,
 
-    pub id: usize,
-    pub phys_id: usize,
+    pub id: u32,
     pub state: CpuState,
     pub vcpu: Vcpu,
     linux: LinuxContext,
@@ -33,12 +32,12 @@ pub struct PerCpu {
 
 impl PerCpu {
     pub fn new<'a>() -> HvResult<&'a mut Self> {
-        if Self::entered_cpus() >= HvHeader::get().max_cpus as usize {
+        if Self::entered_cpus() >= HvHeader::get().max_cpus {
             return hv_result_err!(EINVAL);
         }
 
         let cpu_id = ENTERED_CPUS.fetch_add(1, Ordering::SeqCst);
-        let vaddr = PER_CPU_ARRAY_PTR as VirtAddr + cpu_id * PER_CPU_SIZE;
+        let vaddr = PER_CPU_ARRAY_PTR as VirtAddr + cpu_id as usize * PER_CPU_SIZE;
         let ret = unsafe { &mut *(vaddr as *mut Self) };
         ret.id = cpu_id;
         ret.self_vaddr = vaddr;
@@ -58,28 +57,29 @@ impl PerCpu {
         self as *const _ as VirtAddr + PER_CPU_SIZE - 8
     }
 
-    pub fn entered_cpus() -> usize {
+    pub fn entered_cpus() -> u32 {
         ENTERED_CPUS.load(Ordering::Acquire)
     }
 
-    pub fn activated_cpus() -> usize {
+    pub fn activated_cpus() -> u32 {
         ACTIVATED_CPUS.load(Ordering::Acquire)
     }
 
     pub fn init(&mut self, linux_sp: usize, cell: &Cell) -> HvResult {
         info!("CPU {} init...", self.id);
 
-        self.phys_id = cpu::phys_id();
+        // Save CPU state used for linux.
         self.state = CpuState::HvDisabled;
         self.linux = LinuxContext::load_from(linux_sp);
-        cpu::init();
 
-        unsafe {
-            // Activate hypervisor page table on each cpu.
-            crate::memory::hv_page_table().activate();
-            // avoid dropping, same below
-            core::ptr::write(&mut self.vcpu, Vcpu::new(&self.linux, cell)?);
-        }
+        // Activate hypervisor page table on each cpu.
+        unsafe { crate::memory::hv_page_table().read().activate() };
+
+        // Initialize new CPU state on each cpu.
+        cpu::init_percpu(self)?;
+
+        // Initialize vCPU. Use `ptr::write()` to avoid dropping
+        unsafe { core::ptr::write(&mut self.vcpu, Vcpu::new(&self.linux, cell)?) };
 
         self.state = CpuState::HvEnabled;
         Ok(())
@@ -115,7 +115,6 @@ impl Debug for PerCpu {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let mut res = f.debug_struct("PerCpu");
         res.field("id", &self.id)
-            .field("phys_id", &self.phys_id)
             .field("self_vaddr", &self.self_vaddr)
             .field("state", &self.state);
         if self.state != CpuState::HvDisabled {

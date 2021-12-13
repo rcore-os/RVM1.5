@@ -26,6 +26,9 @@ impl From<MemFlags> for PTF {
         if f.contains(MemFlags::USER) {
             ret |= Self::USER_ACCESSIBLE;
         }
+        if f.contains(MemFlags::IO) {
+            ret |= Self::NO_CACHE;
+        }
         ret
     }
 }
@@ -44,6 +47,9 @@ impl From<PTF> for MemFlags {
         }
         if f.contains(PTF::USER_ACCESSIBLE) {
             ret |= Self::USER;
+        }
+        if f.contains(PTF::NO_CACHE) {
+            ret |= Self::IO;
         }
         ret
     }

@@ -58,6 +58,7 @@ pub mod gaccess;
 use core::ops::{Deref, DerefMut};
 
 use bitflags::bitflags;
+use spin::{Once, RwLock};
 
 use crate::arch::HostPageTable;
 use crate::config::HvSystemConfig;
@@ -86,9 +87,9 @@ bitflags! {
 }
 
 /// Page table used for hypervisor.
-static HV_PT: spin::Once<MemorySet<HostPageTable>> = spin::Once::new();
+static HV_PT: Once<RwLock<MemorySet<HostPageTable>>> = Once::new();
 
-pub fn hv_page_table<'a>() -> &'a MemorySet<HostPageTable> {
+pub fn hv_page_table<'a>() -> &'a RwLock<MemorySet<HostPageTable>> {
     HV_PT.get().expect("Uninitialized hypervisor page table!")
 }
 
@@ -154,7 +155,7 @@ pub fn init_hv_page_table() -> HvResult {
     info!("Hypervisor page table init end.");
     debug!("Hypervisor virtual memory set: {:#x?}", hv_pt);
 
-    HV_PT.call_once(|| hv_pt);
+    HV_PT.call_once(|| RwLock::new(hv_pt));
     Ok(())
 }
 

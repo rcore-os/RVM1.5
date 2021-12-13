@@ -36,16 +36,16 @@ mod lang;
 #[path = "arch/x86_64/mod.rs"]
 mod arch;
 
-use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use config::HvSystemConfig;
 use error::HvResult;
 use header::HvHeader;
 use percpu::PerCpu;
 
-static INITED_CPUS: AtomicUsize = AtomicUsize::new(0);
-static INIT_EARLY_OK: AtomicUsize = AtomicUsize::new(0);
-static INIT_LATE_OK: AtomicUsize = AtomicUsize::new(0);
+static INITED_CPUS: AtomicU32 = AtomicU32::new(0);
+static INIT_EARLY_OK: AtomicU32 = AtomicU32::new(0);
+static INIT_LATE_OK: AtomicU32 = AtomicU32::new(0);
 static ERROR_NUM: AtomicI32 = AtomicI32::new(0);
 
 fn has_err() -> bool {
@@ -63,7 +63,7 @@ fn wait_for(condition: impl Fn() -> bool) -> HvResult {
     }
 }
 
-fn wait_for_counter(counter: &AtomicUsize, max_value: usize) -> HvResult {
+fn wait_for_counter(counter: &AtomicU32, max_value: u32) -> HvResult {
     wait_for(|| counter.load(Ordering::Acquire) < max_value)
 }
 
@@ -113,7 +113,7 @@ fn primary_init_late() {
 
 fn main(cpu_data: &mut PerCpu, linux_sp: usize) -> HvResult {
     let is_primary = cpu_data.id == 0;
-    let online_cpus = HvHeader::get().online_cpus as usize;
+    let online_cpus = HvHeader::get().online_cpus;
     wait_for(|| PerCpu::entered_cpus() < online_cpus)?;
     println!(
         "{} CPU {} entered.",

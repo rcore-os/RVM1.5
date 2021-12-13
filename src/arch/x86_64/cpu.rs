@@ -1,15 +1,11 @@
 use libvmm::msr::Msr;
 use x86::{segmentation, segmentation::SegmentSelector};
 
+use crate::error::HvResult;
+use crate::percpu::PerCpu;
+
 use super::cpuid::CpuId;
 use super::tables::{GDTStruct, GDT, IDT};
-
-pub fn phys_id() -> usize {
-    CpuId::new()
-        .get_feature_info()
-        .unwrap()
-        .initial_local_apic_id() as usize
-}
 
 pub fn frequency() -> u16 {
     static CPU_FREQUENCY: spin::Once<u16> = spin::Once::new();
@@ -42,7 +38,7 @@ pub fn set_thread_pointer(tp: usize) {
 }
 
 /// Reset CPU states for hypervisor use.
-pub fn init() {
+pub fn init_percpu(_cpu_data: &PerCpu) -> HvResult {
     // Setup new GDT, IDT, CS, TSS
     GDT.lock().load();
     unsafe {
@@ -56,4 +52,6 @@ pub fn init() {
 
     // PAT0: WB, PAT1: WC, PAT2: UC
     unsafe { Msr::IA32_PAT.write(0x070106) };
+
+    Ok(())
 }

@@ -1,5 +1,5 @@
 use core::convert::TryFrom;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use bit_field::BitField;
 use numeric_enum_macro::numeric_enum;
@@ -87,7 +87,7 @@ impl<'a> HyperCall<'a> {
     fn hypervisor_disable(&mut self) -> HyperCallResult {
         let cpus = PerCpu::activated_cpus();
 
-        static TRY_DISABLE_CPUS: AtomicUsize = AtomicUsize::new(0);
+        static TRY_DISABLE_CPUS: AtomicU32 = AtomicU32::new(0);
         TRY_DISABLE_CPUS.fetch_add(1, Ordering::SeqCst);
         while TRY_DISABLE_CPUS.load(Ordering::Acquire) < cpus {
             core::hint::spin_loop();
