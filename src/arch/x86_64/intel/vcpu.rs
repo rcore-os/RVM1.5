@@ -17,7 +17,7 @@ use x86_64::registers::rflags::RFlags;
 use super::structs::{MsrBitmap, VmxRegion};
 use crate::arch::cpuid::CpuFeatures;
 use crate::arch::segmentation::{Segment, SegmentAccessRights};
-use crate::arch::tables::{GDTStruct, GDT, IDT};
+use crate::arch::tables::{GdtStruct, IDT};
 use crate::arch::vmm::VcpuAccessGuestState;
 use crate::arch::{GeneralRegisters, GuestPageTableImmut, LinuxContext};
 use crate::cell::Cell;
@@ -189,18 +189,18 @@ impl Vcpu {
         VmcsField64Host::CR3.write(Cr3::read().0.start_address().as_u64())?;
         VmcsField64Host::CR4.write(Cr4::read_raw())?;
 
-        VmcsField16Host::CS_SELECTOR.write(GDTStruct::KCODE_SELECTOR.bits())?;
+        VmcsField16Host::CS_SELECTOR.write(GdtStruct::KCODE_SELECTOR.bits())?;
         VmcsField16Host::DS_SELECTOR.write(0)?;
         VmcsField16Host::ES_SELECTOR.write(0)?;
         VmcsField16Host::SS_SELECTOR.write(0)?;
         VmcsField16Host::FS_SELECTOR.write(0)?;
         VmcsField16Host::GS_SELECTOR.write(0)?;
-        VmcsField16Host::TR_SELECTOR.write(GDTStruct::TSS_SELECTOR.bits())?;
+        VmcsField16Host::TR_SELECTOR.write(GdtStruct::TSS_SELECTOR.bits())?;
         VmcsField64Host::FS_BASE.write(0)?;
         VmcsField64Host::GS_BASE.write(Msr::IA32_GS_BASE.read())?;
         VmcsField64Host::TR_BASE.write(0)?;
 
-        VmcsField64Host::GDTR_BASE.write(GDT.lock().pointer().base.as_u64())?;
+        VmcsField64Host::GDTR_BASE.write(GdtStruct::sgdt().base.as_u64())?;
         VmcsField64Host::IDTR_BASE.write(IDT.lock().pointer().base.as_u64())?;
 
         VmcsField64Host::IA32_SYSENTER_ESP.write(0)?;

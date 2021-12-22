@@ -4,7 +4,7 @@ use x86::segmentation::SegmentSelector;
 use x86_64::structures::gdt::DescriptorFlags;
 use x86_64::structures::DescriptorTablePointer;
 
-use super::tables::GDTStruct;
+use super::tables::GdtStruct;
 
 bitflags! {
     /// Access rights for VMCS guest register states.
@@ -92,7 +92,7 @@ impl Segment {
 
     pub fn from_selector(selector: SegmentSelector, gdt: &DescriptorTablePointer) -> Self {
         let index = selector.index() as usize;
-        let table = GDTStruct::table_of(gdt);
+        let table = GdtStruct::from_pointer(gdt);
 
         let entry_value = table[index];
         let entry = DescriptorFlags::from_bits_truncate(entry_value);

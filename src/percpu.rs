@@ -2,7 +2,7 @@ use core::fmt::{Debug, Formatter, Result};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::vmm::{Vcpu, VcpuAccessGuestState};
-use crate::arch::{cpu, LinuxContext};
+use crate::arch::{cpu, ArchPerCpu, LinuxContext};
 use crate::cell::Cell;
 use crate::consts::{PER_CPU_ARRAY_PTR, PER_CPU_SIZE};
 use crate::error::HvResult;
@@ -26,6 +26,7 @@ pub struct PerCpu {
     pub id: u32,
     pub state: CpuState,
     pub vcpu: Vcpu,
+    arch: ArchPerCpu,
     linux: LinuxContext,
     // Stack will be placed here.
 }
@@ -71,12 +72,10 @@ impl PerCpu {
         // Save CPU state used for linux.
         self.state = CpuState::HvDisabled;
         self.linux = LinuxContext::load_from(linux_sp);
+        self.arch.init();
 
         // Activate hypervisor page table on each cpu.
         unsafe { crate::memory::hv_page_table().read().activate() };
-
-        // Initialize new CPU state on each cpu.
-        cpu::init_percpu(self)?;
 
         // Initialize vCPU. Use `ptr::write()` to avoid dropping
         unsafe { core::ptr::write(&mut self.vcpu, Vcpu::new(&self.linux, cell)?) };

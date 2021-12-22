@@ -184,10 +184,10 @@ impl Vcpu {
         vmcb.sysenter_cs = Msr::IA32_SYSENTER_CS.read();
         vmcb.sysenter_eip = Msr::IA32_SYSENTER_EIP.read();
         vmcb.sysenter_esp = Msr::IA32_SYSENTER_ESP.read();
-        vmcb.star = Msr::IA32_STAR.read();
-        vmcb.lstar = Msr::IA32_LSTAR.read();
-        vmcb.cstar = Msr::IA32_CSTAR.read();
-        vmcb.sfmask = Msr::IA32_FMASK.read();
+        vmcb.star = linux.star;
+        vmcb.lstar = linux.lstar;
+        vmcb.cstar = linux.cstar;
+        vmcb.sfmask = linux.fmask;
         vmcb.kernel_gs_base = Msr::IA32_KERNEL_GSBASE.read();
         vmcb.efer = linux.efer | EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits(); // Make the hypervisor visible
         vmcb.g_pat = linux.pat;

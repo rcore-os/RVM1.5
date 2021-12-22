@@ -4,7 +4,7 @@ use x86_64::registers::control::{Cr0, Cr0Flags, Cr3, Cr3Flags, Cr4, Cr4Flags};
 use x86_64::{addr::PhysAddr, structures::paging::PhysFrame, structures::DescriptorTablePointer};
 
 use super::segmentation::Segment;
-use super::tables::{GDTStruct, IDTStruct, GDT};
+use super::tables::{GdtStruct, IdtStruct};
 
 const SAVED_LINUX_REGS: usize = 8;
 
@@ -112,7 +112,7 @@ impl LinuxContext {
     /// Load linux callee-saved registers from the stack, and other system registers.
     pub fn load_from(linux_sp: usize) -> Self {
         let regs = unsafe { core::slice::from_raw_parts(linux_sp as *const u64, SAVED_LINUX_REGS) };
-        let gdt = GDTStruct::sgdt();
+        let gdt = GdtStruct::sgdt();
         let mut fs = Segment::from_selector(segmentation::fs(), &gdt);
         let mut gs = Segment::from_selector(segmentation::gs(), &gdt);
         fs.base = Msr::IA32_FS_BASE.read();
@@ -134,7 +134,7 @@ impl LinuxContext {
             gs,
             tss: Segment::from_selector(unsafe { task::tr() }, &gdt),
             gdt,
-            idt: IDTStruct::sidt(),
+            idt: IdtStruct::sidt(),
             cr0: Cr0::read(),
             cr3: Cr3::read().0.start_address().as_u64(),
             cr4: Cr4::read(),
@@ -170,18 +170,15 @@ impl LinuxContext {
 
             // Copy Linux TSS descriptor into our GDT, clearing the busy flag,
             // then reload TR from it. We can't use Linux' GDT as it is r/o.
-            {
-                let mut hv_gdt_lock = GDT.lock();
-                let hv_gdt = GDTStruct::table_of_mut(hv_gdt_lock.pointer());
-                let liunx_gdt = GDTStruct::table_of(&self.gdt);
-                let tss_idx = self.tss.selector.index() as usize;
-                hv_gdt[tss_idx] = liunx_gdt[tss_idx];
-                hv_gdt[tss_idx + 1] = liunx_gdt[tss_idx + 1];
-                hv_gdt_lock.load_tss(self.tss.selector);
-            }
+            let mut hv_gdt = GdtStruct::from_pointer(&GdtStruct::sgdt());
+            let liunx_gdt = GdtStruct::from_pointer(&self.gdt);
+            let tss_idx = self.tss.selector.index() as usize;
+            hv_gdt[tss_idx] = liunx_gdt[tss_idx];
+            hv_gdt[tss_idx + 1] = liunx_gdt[tss_idx + 1];
+            hv_gdt.load_tss(self.tss.selector);
 
-            GDTStruct::lgdt(&self.gdt);
-            IDTStruct::lidt(&self.idt);
+            GdtStruct::lgdt(&self.gdt);
+            IdtStruct::lidt(&self.idt);
 
             segmentation::load_cs(self.cs.selector); // XXX: failed to swtich to user CS
             segmentation::load_ds(self.ds.selector);
