@@ -166,13 +166,13 @@ impl Vcpu {
         self.set_cr(3, linux.cr3);
 
         let vmcb = &mut self.vmcb.save;
-        Self::set_vmcb_segment(&mut vmcb.cs, &linux.cs);
-        Self::set_vmcb_segment(&mut vmcb.ds, &linux.ds);
         Self::set_vmcb_segment(&mut vmcb.es, &linux.es);
+        Self::set_vmcb_segment(&mut vmcb.cs, &linux.cs);
+        Self::set_vmcb_segment(&mut vmcb.ss, &linux.ss);
+        Self::set_vmcb_segment(&mut vmcb.ds, &linux.ds);
         Self::set_vmcb_segment(&mut vmcb.fs, &linux.fs);
         Self::set_vmcb_segment(&mut vmcb.gs, &linux.gs);
         Self::set_vmcb_segment(&mut vmcb.tr, &linux.tss);
-        Self::set_vmcb_segment(&mut vmcb.ss, &Segment::invalid());
         Self::set_vmcb_segment(&mut vmcb.ldtr, &Segment::invalid());
         Self::set_vmcb_dtr(&mut vmcb.idtr, &linux.idt);
         Self::set_vmcb_dtr(&mut vmcb.gdtr, &linux.gdt);
@@ -223,9 +223,10 @@ impl Vcpu {
         linux.cr4 = Cr4Flags::from_bits_truncate(vmcb.cr4);
         linux.efer = vmcb.efer & !EferFlags::SECURE_VIRTUAL_MACHINE_ENABLE.bits();
 
-        linux.cs.selector = SegmentSelector::from_raw(vmcb.cs.selector);
-        linux.ds.selector = SegmentSelector::from_raw(vmcb.ds.selector);
         linux.es.selector = SegmentSelector::from_raw(vmcb.es.selector);
+        linux.cs.selector = SegmentSelector::from_raw(vmcb.cs.selector);
+        linux.ss.selector = SegmentSelector::from_raw(vmcb.ss.selector);
+        linux.ds.selector = SegmentSelector::from_raw(vmcb.ds.selector);
 
         linux.gdt.base = VirtAddr::new(vmcb.gdtr.base);
         linux.gdt.limit = vmcb.gdtr.limit as _;

@@ -189,10 +189,10 @@ impl Vcpu {
         VmcsField64Host::CR3.write(Cr3::read().0.start_address().as_u64())?;
         VmcsField64Host::CR4.write(Cr4::read_raw())?;
 
-        VmcsField16Host::CS_SELECTOR.write(GdtStruct::KCODE_SELECTOR.bits())?;
-        VmcsField16Host::DS_SELECTOR.write(0)?;
         VmcsField16Host::ES_SELECTOR.write(0)?;
+        VmcsField16Host::CS_SELECTOR.write(GdtStruct::KCODE_SELECTOR.bits())?;
         VmcsField16Host::SS_SELECTOR.write(0)?;
+        VmcsField16Host::DS_SELECTOR.write(0)?;
         VmcsField16Host::FS_SELECTOR.write(0)?;
         VmcsField16Host::GS_SELECTOR.write(0)?;
         VmcsField16Host::TR_SELECTOR.write(GdtStruct::TSS_SELECTOR.bits())?;
@@ -221,13 +221,13 @@ impl Vcpu {
         self.set_cr(4, linux.cr4.bits());
         self.set_cr(3, linux.cr3);
 
-        set_guest_segment!(linux.cs, CS);
-        set_guest_segment!(linux.ds, DS);
         set_guest_segment!(linux.es, ES);
+        set_guest_segment!(linux.cs, CS);
+        set_guest_segment!(linux.ss, SS);
+        set_guest_segment!(linux.ds, DS);
         set_guest_segment!(linux.fs, FS);
         set_guest_segment!(linux.gs, GS);
         set_guest_segment!(linux.tss, TR);
-        set_guest_segment!(Segment::invalid(), SS);
         set_guest_segment!(Segment::invalid(), LDTR);
 
         VmcsField64Guest::GDTR_BASE.write(linux.gdt.base.as_u64())?;
@@ -263,9 +263,10 @@ impl Vcpu {
         linux.cr4 = Cr4Flags::from_bits_truncate(VmcsField64Guest::CR4.read()?)
             - Cr4Flags::VIRTUAL_MACHINE_EXTENSIONS;
 
-        linux.cs.selector = SegmentSelector::from_raw(VmcsField16Guest::CS_SELECTOR.read()?);
-        linux.ds.selector = SegmentSelector::from_raw(VmcsField16Guest::DS_SELECTOR.read()?);
         linux.es.selector = SegmentSelector::from_raw(VmcsField16Guest::ES_SELECTOR.read()?);
+        linux.cs.selector = SegmentSelector::from_raw(VmcsField16Guest::CS_SELECTOR.read()?);
+        linux.ss.selector = SegmentSelector::from_raw(VmcsField16Guest::SS_SELECTOR.read()?);
+        linux.ds.selector = SegmentSelector::from_raw(VmcsField16Guest::DS_SELECTOR.read()?);
         linux.fs.selector = SegmentSelector::from_raw(VmcsField16Guest::FS_SELECTOR.read()?);
         linux.fs.base = VmcsField64Guest::FS_BASE.read()?;
         linux.gs.selector = SegmentSelector::from_raw(VmcsField16Guest::GS_SELECTOR.read()?);

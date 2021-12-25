@@ -18,10 +18,10 @@ impl ArchPerCpu {
         // Setup new GDT, IDT, CS, TSS
         self.gdt.load();
         unsafe {
-            segmentation::load_cs(GdtStruct::KCODE_SELECTOR);
-            segmentation::load_ds(SegmentSelector::from_raw(0));
             segmentation::load_es(SegmentSelector::from_raw(0));
+            segmentation::load_cs(GdtStruct::KCODE_SELECTOR);
             segmentation::load_ss(SegmentSelector::from_raw(0));
+            segmentation::load_ds(SegmentSelector::from_raw(0));
         }
         IDT.lock().load();
         self.gdt.load_tss(GdtStruct::TSS_SELECTOR);

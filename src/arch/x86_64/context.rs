@@ -20,9 +20,10 @@ pub struct LinuxContext {
     pub rbx: u64,
     pub rbp: u64,
 
-    pub cs: Segment,
-    pub ds: Segment,
     pub es: Segment,
+    pub cs: Segment,
+    pub ss: Segment,
+    pub ds: Segment,
     pub fs: Segment,
     pub gs: Segment,
     pub tss: Segment,
@@ -127,9 +128,10 @@ impl LinuxContext {
             rbx: regs[5],
             rbp: regs[6],
             rip: regs[7],
-            cs: Segment::from_selector(segmentation::cs(), &gdt),
-            ds: Segment::from_selector(segmentation::ds(), &gdt),
             es: Segment::from_selector(segmentation::es(), &gdt),
+            cs: Segment::from_selector(segmentation::cs(), &gdt),
+            ss: Segment::from_selector(segmentation::ss(), &gdt),
+            ds: Segment::from_selector(segmentation::ds(), &gdt),
             fs,
             gs,
             tss: Segment::from_selector(unsafe { task::tr() }, &gdt),
@@ -180,9 +182,10 @@ impl LinuxContext {
             GdtStruct::lgdt(&self.gdt);
             IdtStruct::lidt(&self.idt);
 
-            segmentation::load_cs(self.cs.selector); // XXX: failed to swtich to user CS
-            segmentation::load_ds(self.ds.selector);
             segmentation::load_es(self.es.selector);
+            segmentation::load_cs(self.cs.selector);
+            segmentation::load_ss(self.ss.selector);
+            segmentation::load_ds(self.ds.selector);
             segmentation::load_fs(self.fs.selector);
             segmentation::load_gs(self.gs.selector);
 
