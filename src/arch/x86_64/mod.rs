@@ -11,7 +11,7 @@ pub mod cpu;
 pub mod serial;
 pub mod vmm;
 
-pub use context::{GuestRegisters, LinuxContext};
+pub use context::{GeneralRegisters, LinuxContext};
 pub use exception::ExceptionType;
 pub use page_table::PageTable as HostPageTable;
 pub use page_table::PageTable as GuestPageTable;

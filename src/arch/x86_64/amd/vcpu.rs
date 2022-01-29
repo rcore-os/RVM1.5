@@ -12,7 +12,7 @@ use x86_64::structures::DescriptorTablePointer;
 
 use crate::arch::segmentation::Segment;
 use crate::arch::vmm::VcpuAccessGuestState;
-use crate::arch::{GuestPageTableImmut, GuestRegisters, LinuxContext};
+use crate::arch::{GeneralRegisters, GuestPageTableImmut, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
 use crate::memory::{addr::virt_to_phys, Frame, GenericPageTableImmut};
@@ -21,7 +21,7 @@ use crate::percpu::PerCpu;
 #[repr(C)]
 pub struct Vcpu {
     /// Save guest general registers when handle VM exits.
-    guest_regs: GuestRegisters,
+    guest_regs: GeneralRegisters,
     /// GS_BASE will be loaded from here when handle VM exits.
     host_tp: u64,
     /// RSP will be loaded from here when handle VM exits.
@@ -242,11 +242,11 @@ impl Vcpu {
 }
 
 impl VcpuAccessGuestState for Vcpu {
-    fn regs(&self) -> &GuestRegisters {
+    fn regs(&self) -> &GeneralRegisters {
         &self.guest_regs
     }
 
-    fn regs_mut(&mut self) -> &mut GuestRegisters {
+    fn regs_mut(&mut self) -> &mut GeneralRegisters {
         &mut self.guest_regs
     }
 
@@ -324,7 +324,7 @@ unsafe extern "sysv64" fn svm_run() -> ! {
         "push r14",                 // push saved RAX to restore RAX later
         restore_regs_from_stack!(),
         "jmp {2}",
-        const core::mem::size_of::<GuestRegisters>(),
+        const core::mem::size_of::<GeneralRegisters>(),
         sym vmexit_handler_wrapper,
         sym svm_run,
         options(noreturn),

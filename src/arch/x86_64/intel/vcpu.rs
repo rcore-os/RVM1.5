@@ -19,7 +19,7 @@ use crate::arch::cpuid::CpuFeatures;
 use crate::arch::segmentation::{Segment, SegmentAccessRights};
 use crate::arch::tables::{GDTStruct, GDT, IDT};
 use crate::arch::vmm::VcpuAccessGuestState;
-use crate::arch::{GuestPageTableImmut, GuestRegisters, LinuxContext};
+use crate::arch::{GeneralRegisters, GuestPageTableImmut, LinuxContext};
 use crate::cell::Cell;
 use crate::error::HvResult;
 use crate::percpu::PerCpu;
@@ -27,7 +27,7 @@ use crate::percpu::PerCpu;
 #[repr(C)]
 pub struct Vcpu {
     /// Save guest general registers when handle VM exits.
-    guest_regs: GuestRegisters,
+    guest_regs: GeneralRegisters,
     /// RSP will be loaded from here when handle VM exits.
     host_stack_top: u64,
     /// VMXON region, required by VMX
@@ -362,11 +362,11 @@ impl Vcpu {
 }
 
 impl VcpuAccessGuestState for Vcpu {
-    fn regs(&self) -> &GuestRegisters {
+    fn regs(&self) -> &GeneralRegisters {
         &self.guest_regs
     }
 
-    fn regs_mut(&mut self) -> &mut GuestRegisters {
+    fn regs_mut(&mut self) -> &mut GeneralRegisters {
         &mut self.guest_regs
     }
 
@@ -483,7 +483,7 @@ unsafe extern "sysv64" fn vmx_exit() -> ! {
         "mov rsp, r15",         // load temporary RSP from r15
         restore_regs_from_stack!(),
         "vmresume",
-        const core::mem::size_of::<GuestRegisters>(),
+        const core::mem::size_of::<GeneralRegisters>(),
         sym crate::arch::vmm::vmexit_handler,
     );
     panic!("VM resume failed: {:?}", Vmcs::instruction_error());

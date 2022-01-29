@@ -20,7 +20,8 @@ pub fn frequency() -> u16 {
 }
 
 pub fn current_cycle() -> u64 {
-    unsafe { core::arch::x86_64::_rdtsc() }
+    let mut aux = 0;
+    unsafe { core::arch::x86_64::__rdtscp(&mut aux) }
 }
 
 pub fn current_time_nanos() -> u64 {

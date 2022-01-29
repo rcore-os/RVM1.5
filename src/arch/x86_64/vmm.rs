@@ -8,15 +8,15 @@ mod vendor;
 
 use x86_64::registers::control::{Cr0Flags, Cr4Flags};
 
-use super::GuestRegisters;
+use super::GeneralRegisters;
 use crate::{error::HvResult, percpu::PerCpu};
 
 pub use vendor::{check_hypervisor_feature, NestedPageTable, Vcpu};
 
 pub trait VcpuAccessGuestState {
     // Architecture independent methods:
-    fn regs(&self) -> &GuestRegisters;
-    fn regs_mut(&mut self) -> &mut GuestRegisters;
+    fn regs(&self) -> &GeneralRegisters;
+    fn regs_mut(&mut self) -> &mut GeneralRegisters;
     fn instr_pointer(&self) -> u64;
     fn stack_pointer(&self) -> u64;
     fn frame_pointer(&self) -> u64 {

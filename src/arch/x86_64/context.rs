@@ -34,14 +34,18 @@ pub struct LinuxContext {
     pub cr4: Cr4Flags,
 
     pub efer: u64,
+    pub star: u64,
     pub lstar: u64,
+    pub cstar: u64,
+    pub fmask: u64,
+    pub kernel_gsbase: u64,
     pub pat: u64,
     pub mtrr_def_type: u64,
 }
 
 #[repr(C)]
 #[derive(Debug, Default)]
-pub struct GuestRegisters {
+pub struct GeneralRegisters {
     pub rax: u64,
     pub rcx: u64,
     pub rdx: u64,
@@ -135,7 +139,11 @@ impl LinuxContext {
             cr3: Cr3::read().0.start_address().as_u64(),
             cr4: Cr4::read(),
             efer: Msr::IA32_EFER.read(),
+            star: Msr::IA32_STAR.read(),
             lstar: Msr::IA32_LSTAR.read(),
+            cstar: Msr::IA32_CSTAR.read(),
+            fmask: Msr::IA32_FMASK.read(),
+            kernel_gsbase: Msr::IA32_KERNEL_GSBASE.read(),
             pat: Msr::IA32_PAT.read(),
             mtrr_def_type: Msr::IA32_MTRR_DEF_TYPE.read(),
         }
@@ -144,8 +152,13 @@ impl LinuxContext {
     /// Restore system registers.
     pub fn restore(&self) {
         unsafe {
-            Msr::IA32_PAT.write(self.pat);
             Msr::IA32_EFER.write(self.efer);
+            Msr::IA32_STAR.write(self.star);
+            Msr::IA32_LSTAR.write(self.lstar);
+            Msr::IA32_CSTAR.write(self.cstar);
+            Msr::IA32_FMASK.write(self.fmask);
+            Msr::IA32_KERNEL_GSBASE.write(self.kernel_gsbase);
+            Msr::IA32_PAT.write(self.pat);
 
             Cr0::write(self.cr0);
             Cr4::write(self.cr4);
@@ -181,7 +194,7 @@ impl LinuxContext {
     }
 
     /// Restore linux general-purpose registers and stack, then return back to linux.
-    pub fn return_to_linux(&self, guest_regs: &GuestRegisters) -> ! {
+    pub fn return_to_linux(&self, guest_regs: &GeneralRegisters) -> ! {
         unsafe {
             Msr::IA32_GS_BASE.write(self.gs.base);
             asm!(
@@ -196,7 +209,7 @@ impl LinuxContext {
                 linux_rsp = in(reg) self.rsp,
                 linux_rip = in(reg) self.rip,
                 guest_regs = in(reg) guest_regs,
-                guest_regs_size = const core::mem::size_of::<GuestRegisters>(),
+                guest_regs_size = const core::mem::size_of::<GeneralRegisters>(),
                 options(noreturn),
             );
         }

@@ -1,4 +1,4 @@
-use super::context::GuestRegisters;
+use super::context::GeneralRegisters;
 
 global_asm!(include_str!(concat!(env!("OUT_DIR"), "/exception.S")));
 
@@ -34,24 +34,24 @@ pub mod ExceptionType {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct ExceptionFrame {
+pub struct TrapFrame {
     // Pushed by `common_exception_entry`
-    regs: GuestRegisters,
+    pub regs: GeneralRegisters,
 
     // Pushed by 'exception.S'
-    num: usize,
-    error_code: usize,
+    pub num: usize,
+    pub error_code: usize,
 
     // Pushed by CPU
-    rip: usize,
-    cs: usize,
-    rflags: usize,
+    pub rip: usize,
+    pub cs: usize,
+    pub rflags: usize,
 
-    rsp: usize,
-    ss: usize,
+    pub rsp: usize,
+    pub ss: usize,
 }
 
-fn exception_handler(frame: &ExceptionFrame) {
+fn exception_handler(frame: &TrapFrame) {
     trace!("Exception or interrupt #{:#x}", frame.num);
     match frame.num as u8 {
         ExceptionType::NonMaskableInterrupt => handle_nmi(),
@@ -71,7 +71,7 @@ fn handle_nmi() {
     warn!("Unhandled exception: NMI");
 }
 
-fn handle_page_fault(frame: &ExceptionFrame) {
+fn handle_page_fault(frame: &TrapFrame) {
     panic!(
         "Unhandled hypervisor page fault @ {:#x?}, error_code={:#x}: {:#x?}",
         x86_64::registers::control::Cr2::read(),
