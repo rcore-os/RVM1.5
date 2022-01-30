@@ -127,7 +127,7 @@ impl VmExit<'_> {
         self.cpu_data.vcpu.advance_rip(VM_EXIT_LEN_HYPERCALL)?;
         let guest_regs = self.cpu_data.vcpu.regs();
         let (code, arg0, arg1) = (guest_regs.rax, guest_regs.rdi, guest_regs.rsi);
-        HyperCall::new(&mut self.cpu_data).hypercall(code as _, arg0, arg1)?;
+        HyperCall::new(self.cpu_data).hypercall(code as _, arg0, arg1)?;
         Ok(())
     }
 

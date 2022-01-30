@@ -10,7 +10,7 @@ unsafe extern "sysv64" fn switch_stack(linux_sp: usize) -> i32 {
     };
     let hv_sp = cpu_data.stack_top();
     let ret;
-    asm!("
+    core::arch::asm!("
         mov [rsi], {linux_tp}   // save gs_base to stack
         mov rcx, rsp
         mov rsp, {hv_sp}
@@ -32,7 +32,7 @@ unsafe extern "sysv64" fn switch_stack(linux_sp: usize) -> i32 {
 #[naked]
 #[no_mangle]
 pub unsafe extern "C" fn arch_entry() -> i32 {
-    asm!("
+    core::arch::asm!("
         // rip is pushed
         cli
         push rbp

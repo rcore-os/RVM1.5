@@ -70,7 +70,7 @@ clippy:
 
 .PHONY: test
 test:
-	cargo test --features $(features) --release -- --nocapture
+	cargo test --features "$(features)" --release -- --nocapture
 
 .PHONY: fmt
 fmt:

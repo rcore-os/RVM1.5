@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use x86::bits64::rflags::{self, RFlags};
 use x86::vmx::{Result, VmFail};
 

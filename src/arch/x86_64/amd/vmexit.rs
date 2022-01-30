@@ -6,7 +6,7 @@ use crate::error::HvResult;
 
 impl VmExit<'_> {
     fn handle_nmi(&mut self) -> HvResult {
-        unsafe { asm!("stgi; clgi") };
+        unsafe { core::arch::asm!("stgi; clgi") };
         Ok(())
     }
 

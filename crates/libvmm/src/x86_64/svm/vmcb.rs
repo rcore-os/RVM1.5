@@ -141,7 +141,6 @@ pub struct VmExitInfo {
 
 impl VmExitInfo {
     pub fn new(vmcb: &Vmcb) -> Self {
-        use core::convert::TryInto;
         Self {
             exit_code: vmcb.control.exit_code.try_into(),
             exit_info_1: vmcb.control.exit_info_1,

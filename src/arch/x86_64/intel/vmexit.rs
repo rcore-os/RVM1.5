@@ -14,7 +14,7 @@ impl VmExit<'_> {
         );
         match intr_info.vector {
             ExceptionType::NonMaskableInterrupt => unsafe {
-                asm!("int {}", const ExceptionType::NonMaskableInterrupt)
+                core::arch::asm!("int {}", const ExceptionType::NonMaskableInterrupt)
             },
             v => warn!("Unhandled Guest Exception: #{:#x}", v),
         }

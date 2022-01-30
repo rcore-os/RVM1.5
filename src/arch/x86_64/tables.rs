@@ -81,7 +81,9 @@ impl GdtStruct {
             limit: 0,
             base: VirtAddr::new(0),
         };
-        unsafe { asm!("sgdt [{0}]", in(reg) &mut gdt_ptr, options(nostack, preserves_flags)) };
+        unsafe {
+            core::arch::asm!("sgdt [{0}]", in(reg) &mut gdt_ptr, options(nostack, preserves_flags));
+        }
         gdt_ptr
     }
 

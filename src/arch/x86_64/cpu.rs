@@ -25,7 +25,7 @@ pub fn current_time_nanos() -> u64 {
 
 pub fn thread_pointer() -> usize {
     let ret;
-    unsafe { asm!("mov {0}, gs:0", out(reg) ret, options(nostack)) }; // PerCpu::self_vaddr
+    unsafe { core::arch::asm!("mov {0}, gs:0", out(reg) ret, options(nostack)) }; // PerCpu::self_vaddr
     ret
 }
 

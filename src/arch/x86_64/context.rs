@@ -197,7 +197,7 @@ impl LinuxContext {
     pub fn return_to_linux(&self, guest_regs: &GeneralRegisters) -> ! {
         unsafe {
             Msr::IA32_GS_BASE.write(self.gs.base);
-            asm!(
+            core::arch::asm!(
                 "mov rsp, {linux_rsp}",
                 "push {linux_rip}",
                 "mov rcx, rsp",

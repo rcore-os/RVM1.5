@@ -1,3 +1,4 @@
+use core::arch::asm;
 use core::fmt::{Debug, Formatter, Result};
 
 use libvmm::msr::Msr;
@@ -473,8 +474,6 @@ impl Debug for Vcpu {
 }
 
 #[naked]
-#[inline(never)]
-#[allow(unsupported_naked_functions)]
 unsafe extern "sysv64" fn vmx_exit() -> ! {
     asm!(
         save_regs_to_stack!(),
@@ -484,8 +483,14 @@ unsafe extern "sysv64" fn vmx_exit() -> ! {
         "mov rsp, r15",         // load temporary RSP from r15
         restore_regs_from_stack!(),
         "vmresume",
+        "jmp {2}",
         const core::mem::size_of::<GeneralRegisters>(),
         sym crate::arch::vmm::vmexit_handler,
+        sym vmresume_failed,
+        options(noreturn),
     );
+}
+
+fn vmresume_failed() -> ! {
     panic!("VM resume failed: {:?}", Vmcs::instruction_error());
 }

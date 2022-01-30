@@ -2,7 +2,7 @@
 name = "rvm"
 version = "1.0.0"
 authors = ["Yuekai Jia <equation618@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "A Type-1.5 hypervisor written in Rust."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -25,6 +25,6 @@ lazy_static = { version = "1.4", features = ["spin_no_std"] }
 bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator", rev = "03bd9909" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-x86 = "0.43"
+x86 = "0.44"
 x86_64 = "0.14"
 raw-cpuid = "10.2"
