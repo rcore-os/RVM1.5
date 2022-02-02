@@ -21,4 +21,4 @@ libvmm_macros = { path = "./libvmm_macros", version = "0.1.0" }
 memoffset = "0.6"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-x86 = "0.44"
+x86 = "0.46"

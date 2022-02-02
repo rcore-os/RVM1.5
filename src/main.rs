@@ -1,8 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![cfg_attr(test, allow(dead_code))]
-#![feature(asm)]
-#![feature(global_asm)]
 #![feature(asm_sym)]
 #![feature(asm_const)]
 #![feature(lang_items)]
