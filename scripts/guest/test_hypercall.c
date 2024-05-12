@@ -2,7 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define HYPERCALL "vmcall"
+#ifdef AMD
+  #define HYPERCALL "vmmcall"
+#else
+  #define HYPERCALL "vmcall"
+#endif
 
 static void in_guest() {
 	printf("Execute VMCALL OK.\n");

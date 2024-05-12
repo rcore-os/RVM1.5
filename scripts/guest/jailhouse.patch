@@ -148,7 +148,7 @@ index 00000000..6f9dc246
 +echo "Created config file at './configs/x86/qemu-ubuntu.c'"
 +
 +# Extract kernel command line
-+cmdline=$(cat ./configs/x86/qemu-ubuntu.c | grep memmap | tr -d " \*" | sed 's/\$/\\\\\\\\\\$/g')
++cmdline=$(cat ./configs/x86/qemu-ubuntu.c | grep memmap | tr -d " \*" | sed 's/\$/\\\\\\$/g')
 +
 +# Update grub config
 +cmdline=$(echo $cmdline | sed 's/\\/\\\\/g')

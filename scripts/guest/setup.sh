@@ -5,9 +5,10 @@ sudo sed -i "s/http:\/\/archive.ubuntu.com/http:\/\/mirrors.tuna.tsinghua.edu.cn
 sudo apt-get update
 sudo apt-get install -y build-essential python3-mako
 
-# Create a hypervisor image link to /lib/firmware/rvm-intel.bin
+# Create a hypervisor image link to /lib/firmware/rvm-xxx.bin
 sudo mkdir -p /lib/firmware
 sudo ln -sf ~/rvm-intel.bin /lib/firmware
+sudo ln -sf ~/rvm-amd.bin /lib/firmware
 
 # Clone jailhouse, apply patches and build
 git clone https://github.com/siemens/jailhouse.git
